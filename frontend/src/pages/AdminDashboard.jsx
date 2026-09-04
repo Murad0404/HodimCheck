@@ -22,7 +22,7 @@ export default function AdminDashboard() {
 
   const fetchCompanyData = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}`, {
+      const res = await fetch(`/api/company/${user.companyId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -34,7 +34,7 @@ export default function AdminDashboard() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}/users`, {
+      const res = await fetch(`/api/company/${user.companyId}/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -46,7 +46,7 @@ export default function AdminDashboard() {
 
   const fetchAttendance = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}/attendance`, {
+      const res = await fetch(`/api/company/${user.companyId}/attendance`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
   const handleAddUser = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}/users`, {
+      const res = await fetch(`/api/company/${user.companyId}/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(newUser)
@@ -93,7 +93,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!dayOffForm.userId || !dayOffForm.date) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}/users/${dayOffForm.userId}/dayoff`, {
+      const res = await fetch(`/api/company/${user.companyId}/users/${dayOffForm.userId}/dayoff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ date: dayOffForm.date, reason: dayOffForm.reason })
@@ -113,7 +113,7 @@ export default function AdminDashboard() {
 
   const toggleFaceId = async (enabled) => {
     try {
-      await fetch(`http://localhost:5000/api/company/${user.companyId}/faceid`, {
+      await fetch(`/api/company/${user.companyId}/faceid`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ enabled })

@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { readDb, writeDb, generateId } = require('../db');
+const Company = require('../models/Company');
+const User = require('../models/User');
+const Attendance = require('../models/Attendance');
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization;
@@ -25,41 +27,34 @@ const adminMiddleware = (req, res, next) => {
 router.post('/', async (req, res) => {
   try {
     const { name, password } = req.body;
-    const db = readDb();
     
     const companyCode = Math.floor(100000 + Math.random() * 900000).toString();
     const qrCodeData = `COMPANY_QR_${Date.now()}_${companyCode}`;
 
-    const newCompany = {
-      _id: generateId(),
+    const newCompany = new Company({
       name,
       companyCode,
-      qrCodeData,
-      faceIdEnabled: false,
-      createdAt: new Date().toISOString()
-    };
+      qrCodeData
+    });
     
-    db.companies.push(newCompany);
+    await newCompany.save();
 
-    // Create default admin for this company
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password || 'admin123', salt);
 
-    const adminUser = {
-      _id: generateId(),
+    const adminUser = new User({
       employeeId: `ADMIN-${Math.floor(1000 + Math.random() * 9000)}`,
       companyId: newCompany._id,
       fullName: 'Admin',
       position: 'Admin',
       role: 'admin',
-      password: hashedPassword,
-      faceDescriptor: []
-    };
+      password: hashedPassword
+    });
     
-    db.users.push(adminUser);
+    await adminUser.save();
+    
     newCompany.adminId = adminUser._id;
-    
-    writeDb(db);
+    await newCompany.save();
 
     res.status(201).json({ 
       company: newCompany, 
@@ -74,8 +69,7 @@ router.post('/', async (req, res) => {
 // Kompaniya ma'lumotlarini olish
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const db = readDb();
-    const company = db.companies.find(c => c._id === req.params.id);
+    const company = await Company.findById(req.params.id);
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
     res.json(company);
   } catch (error) {
@@ -88,13 +82,9 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.put('/:id/faceid', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { enabled } = req.body;
-    const db = readDb();
-    const companyIndex = db.companies.findIndex(c => c._id === req.params.id);
+    const company = await Company.findByIdAndUpdate(req.params.id, { faceIdEnabled: enabled }, { new: true });
     
-    if (companyIndex === -1) return res.status(404).json({ message: 'Kompaniya topilmadi' });
-    
-    db.companies[companyIndex].faceIdEnabled = enabled;
-    writeDb(db);
+    if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
     
     res.json({ message: 'Sozlamalar saqlandi', faceIdEnabled: enabled });
   } catch (error) {
@@ -106,14 +96,8 @@ router.put('/:id/faceid', authMiddleware, adminMiddleware, async (req, res) => {
 // Xodimlarni ro'yxatini olish
 router.get('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const db = readDb();
-    const users = db.users.filter(u => u.companyId === req.params.id);
-    // Don't send password hashes
-    const safeUsers = users.map(u => {
-      const { password, faceDescriptor, ...safeData } = u;
-      return safeData;
-    });
-    res.json(safeUsers);
+    const users = await User.find({ companyId: req.params.id }).select('-password -faceDescriptor');
+    res.json(users);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });
@@ -124,33 +108,26 @@ router.get('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
 router.post('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { fullName, position, totalDayOffs } = req.body;
-    const db = readDb();
     
-    const company = db.companies.find(c => c._id === req.params.id);
+    const company = await Company.findById(req.params.id);
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
 
     const employeeId = 'EMP-' + Math.floor(1000 + Math.random() * 9000).toString();
     const salt = await bcrypt.genSalt(10);
-    // Standart parol (masalan, 123456) bilan qo'shish
     const hashedPassword = await bcrypt.hash('123456', salt);
 
-    const newUser = {
-      _id: generateId(),
+    const newUser = new User({
       employeeId,
       companyId: req.params.id,
       fullName,
       position,
       role: 'employee',
       password: hashedPassword,
-      faceDescriptor: [],
-      totalDayOffs: totalDayOffs || 0,
-      usedDayOffs: 0,
-      dayOffDates: []
-    };
+      totalDayOffs: totalDayOffs || 24,
+      usedDayOffs: 0
+    });
 
-    db.users.push(newUser);
-    writeDb(db);
-
+    await newUser.save();
     res.status(201).json({ message: 'Xodim qo\'shildi', user: { employeeId, fullName, position } });
   } catch (error) {
     console.error(error);
@@ -162,21 +139,17 @@ router.post('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
 router.post('/:id/users/:userId/dayoff', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { date, reason } = req.body;
-    const db = readDb();
-    const userIndex = db.users.findIndex(u => u._id === req.params.userId && u.companyId === req.params.id);
+    const user = await User.findOne({ _id: req.params.userId, companyId: req.params.id });
     
-    if (userIndex === -1) return res.status(404).json({ message: 'Xodim topilmadi' });
-
-    const user = db.users[userIndex];
+    if (!user) return res.status(404).json({ message: 'Xodim topilmadi' });
     if (user.usedDayOffs >= (user.totalDayOffs || 0)) {
       return res.status(400).json({ message: 'Xodimda dam olish kunlari qolmagan' });
     }
 
     user.usedDayOffs = (user.usedDayOffs || 0) + 1;
-    if (!user.dayOffDates) user.dayOffDates = [];
-    user.dayOffDates.push({ date, reason, assignedAt: new Date().toISOString() });
+    user.dayOffDates.push({ date, reason });
 
-    writeDb(db);
+    await user.save();
     res.json({ message: 'Dam olish kuni belgilandi', usedDayOffs: user.usedDayOffs });
   } catch (error) {
     console.error(error);
@@ -187,21 +160,20 @@ router.post('/:id/users/:userId/dayoff', authMiddleware, adminMiddleware, async 
 // Kompaniyaning barcha davomat tarixini olish
 router.get('/:id/attendance', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const db = readDb();
-    const attendance = db.attendance.filter(a => a.companyId === req.params.id);
+    const attendance = await Attendance.find({ companyId: req.params.id })
+      .populate('userId', 'fullName employeeId')
+      .sort({ timestamp: -1 });
     
-    // Foydalanuvchi ismlarini biriktirish
-    const enhancedAttendance = attendance.map(a => {
-      const user = db.users.find(u => u._id === a.userId);
-      return {
-        ...a,
-        fullName: user ? user.fullName : 'Noma\'lum xodim',
-        employeeId: user ? user.employeeId : 'N/A'
-      };
-    });
+    const formatted = attendance.map(a => ({
+      _id: a._id,
+      timestamp: a.timestamp,
+      type: a.type,
+      faceVerified: a.faceVerified,
+      fullName: a.userId ? a.userId.fullName : 'O\'chirilgan xodim',
+      employeeId: a.userId ? a.userId.employeeId : 'N/A'
+    }));
 
-    enhancedAttendance.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    res.json(enhancedAttendance);
+    res.json(formatted);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { readDb, writeDb, generateId } = require('../db');
+const Company = require('../models/Company');
+const User = require('../models/User');
+const Attendance = require('../models/Attendance');
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization;
@@ -22,8 +24,7 @@ router.post('/mark', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const companyId = req.user.companyId;
 
-    const db = readDb();
-    const company = db.companies.find(c => c._id === companyId);
+    const company = await Company.findById(companyId);
     
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
 
@@ -35,17 +36,14 @@ router.post('/mark', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Yuzni tasdiqlash majburiy' });
     }
 
-    const attendance = {
-      _id: generateId(),
+    const attendance = new Attendance({
       userId,
       companyId,
       type,
-      faceVerified: !!faceVerified,
-      timestamp: new Date().toISOString()
-    };
+      faceVerified: !!faceVerified
+    });
 
-    db.attendance.push(attendance);
-    writeDb(db);
+    await attendance.save();
 
     res.status(201).json({ message: `Muvaffaqiyatli ${type === 'keldi' ? 'keldingiz' : 'ketdingiz'}` });
   } catch (error) {
@@ -57,11 +55,9 @@ router.post('/mark', authMiddleware, async (req, res) => {
 // Xodimning davomat tarixini olish
 router.get('/history', authMiddleware, async (req, res) => {
   try {
-    const db = readDb();
-    const history = db.attendance
-      .filter(a => a.userId === req.user.id)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 30);
+    const history = await Attendance.find({ userId: req.user.id })
+      .sort({ timestamp: -1 })
+      .limit(30);
     res.json(history);
   } catch (error) {
     console.error(error);
@@ -78,12 +74,11 @@ router.post('/face-register', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Yuz ma\'lumotlari xato' });
     }
 
-    const db = readDb();
-    const userIndex = db.users.findIndex(u => u._id === req.user.id);
-    if (userIndex === -1) return res.status(404).json({ message: 'Xodim topilmadi' });
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'Xodim topilmadi' });
 
-    db.users[userIndex].faceDescriptor = descriptor;
-    writeDb(db);
+    user.faceDescriptor = descriptor;
+    await user.save();
 
     res.json({ message: 'Yuzingiz muvaffaqiyatli ro\'yxatdan o\'tkazildi' });
   } catch (error) {
@@ -95,8 +90,7 @@ router.post('/face-register', authMiddleware, async (req, res) => {
 // Userning yuz ma'lumotini olish (taqqoslash uchun)
 router.get('/face-data', authMiddleware, async (req, res) => {
   try {
-    const db = readDb();
-    const user = db.users.find(u => u._id === req.user.id);
+    const user = await User.findById(req.user.id);
     
     if (!user || !user.faceDescriptor || user.faceDescriptor.length === 0) {
       return res.status(404).json({ message: 'Yuz ma\'lumoti topilmadi' });

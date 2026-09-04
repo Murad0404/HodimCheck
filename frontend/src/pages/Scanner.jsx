@@ -20,7 +20,7 @@ export default function Scanner() {
 
   const fetchCompanyData = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/company/${user.companyId}`, {
+      const res = await fetch(`/api/company/${user.companyId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -62,7 +62,7 @@ export default function Scanner() {
   const markAttendance = async (qrData, type, faceVerified) => {
     setStatus('Yuborilmoqda...');
     try {
-      const res = await fetch('http://localhost:5000/api/attendance/mark', {
+      const res = await fetch('/api/attendance/mark', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

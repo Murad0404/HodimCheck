@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { readDb, writeDb, generateId } = require('../db');
+const Company = require('../models/Company');
+const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
@@ -10,9 +11,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 router.post('/register', async (req, res) => {
   try {
     const { companyCode, fullName, position, password } = req.body;
-    const db = readDb();
     
-    const company = db.companies.find(c => c.companyCode === companyCode);
+    const company = await Company.findOne({ companyCode });
     if (!company) {
       return res.status(404).json({ message: 'Kompaniya topilmadi. Kodni tekshiring' });
     }
@@ -22,19 +22,16 @@ router.post('/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = {
-      _id: generateId(),
+    const newUser = new User({
       employeeId,
       companyId: company._id,
       fullName,
       position,
       role: 'employee',
-      password: hashedPassword,
-      faceDescriptor: []
-    };
+      password: hashedPassword
+    });
 
-    db.users.push(newUser);
-    writeDb(db);
+    await newUser.save();
 
     res.status(201).json({ 
       message: 'Muvaffaqiyatli ro\'yxatdan o\'tdingiz', 
@@ -50,9 +47,8 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { employeeId, password } = req.body;
-    const db = readDb();
     
-    const user = db.users.find(u => u.employeeId === employeeId);
+    const user = await User.findOne({ employeeId });
     if (!user) {
       return res.status(400).json({ message: 'Xodim topilmadi yoki parol noto\'g\'ri' });
     }

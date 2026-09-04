@@ -62,7 +62,7 @@ export default function FaceScanner({ mode, onComplete }) {
   const registerFace = async (descriptor) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/attendance/face-register', {
+      const res = await fetch('/api/attendance/face-register', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -87,7 +87,7 @@ export default function FaceScanner({ mode, onComplete }) {
   const verifyFace = async (descriptor) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/attendance/face-data', {
+      const res = await fetch('/api/attendance/face-data', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
