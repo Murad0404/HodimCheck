@@ -1,0 +1,26 @@
+{
+  "companies": [
+    {
+      "_id": "8jr29zaiq",
+      "name": "biorganic",
+      "companyCode": "334118",
+      "qrCodeData": "COMPANY_QR_1788503000595_334118",
+      "faceIdEnabled": false,
+      "createdAt": "2026-09-04T06:23:20.595Z",
+      "adminId": "mw53n66ki"
+    }
+  ],
+  "users": [
+    {
+      "_id": "mw53n66ki",
+      "employeeId": "ADMIN-8716",
+      "companyId": "8jr29zaiq",
+      "fullName": "Admin",
+      "position": "Admin",
+      "role": "admin",
+      "password": "$2b$10$4jzYBgLYF49xrqsuYiue8u2HNVlrFkuW9MH/vlgYgYW65UZd/0lpe",
+      "faceDescriptor": []
+    }
+  ],
+  "attendance": []
+}
