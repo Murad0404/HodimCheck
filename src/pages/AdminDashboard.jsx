@@ -21,11 +21,11 @@ export default function AdminDashboard() {
   
   const [telegramSettings, setTelegramSettings] = useState({
     telegramBotToken: '',
-    telegramChatId: '',
     reportTimeKeldi: '11:00',
     reportTimeKetdi: '19:00'
   });
   const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [subscriberCount, setSubscriberCount] = useState(0);
 
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -40,10 +40,10 @@ export default function AdminDashboard() {
       setCompany(data);
       setTelegramSettings({
         telegramBotToken: data.telegramBotToken || '',
-        telegramChatId: data.telegramChatId || '',
         reportTimeKeldi: data.reportTimeKeldi || '11:00',
         reportTimeKetdi: data.reportTimeKetdi || '19:00'
       });
+      setSubscriberCount(data.telegramSubscribers?.length || 0);
     } catch (err) {
       console.error(err);
     }
@@ -218,10 +218,9 @@ export default function AdminDashboard() {
 
   const handleSaveTelegram = async () => {
     const currentToken = telegramSettings.telegramBotToken.trim();
-    const currentChatId = telegramSettings.telegramChatId.trim();
 
-    if (!currentToken || !currentChatId) {
-      alert('Iltimos Bot Tokeni va Chat ID ni kiriting!');
+    if (!currentToken) {
+      alert('Iltimos Bot Tokenini kiriting!');
       return;
     }
     try {
@@ -231,7 +230,15 @@ export default function AdminDashboard() {
         body: JSON.stringify(telegramSettings)
       });
       const data = await res.json();
-      if (!res.ok) {
+      if (res.ok) {
+        if (data.webhookSet) {
+          alert('✅ ' + data.message);
+        } else {
+          alert('⚠️ ' + data.message);
+        }
+        setSubscriberCount(data.subscriberCount || 0);
+        fetchCompanyData();
+      } else {
         alert('❌ ' + (data.message || 'Saqlashda xatolik'));
       }
     } catch (err) {
@@ -242,39 +249,38 @@ export default function AdminDashboard() {
 
   const handleTestTelegram = async () => {
     const currentToken = telegramSettings.telegramBotToken.trim();
-    const currentChatId = telegramSettings.telegramChatId.trim();
 
-    if (!currentToken || !currentChatId) {
-      alert('Iltimos avval Bot Tokeni va Chat ID ni kiriting!');
+    if (!currentToken) {
+      alert('Iltimos avval Bot Tokenini kiriting!');
       return;
     }
     try {
-      // Avval joriy ma'lumotlarni saqlaymiz
+      // Avval sozlamalarni saqlaymiz va webhook o'rnatamiz
       const saveRes = await fetch(`/api/company/${user.companyId}/telegram`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(telegramSettings)
       });
+      const saveData = await saveRes.json();
       if (!saveRes.ok) {
-        const saveData = await saveRes.json();
         alert('❌ Sozlamalarni saqlashda xato: ' + (saveData.message || 'Noma\'lum xato'));
         return;
       }
-      // Keyin test yuboramiz
+      setSubscriberCount(saveData.subscriberCount || 0);
+      
+      // Keyin test xabar yuboramiz
       const res = await fetch(`/api/cron/test-telegram`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ token: currentToken, chatId: currentChatId })
+        body: JSON.stringify({ token: currentToken, companyId: user.companyId })
       });
       const data = await res.json();
       if (res.ok) {
-        alert('✅ Test xabar botingizga yuborildi! Telegramni tekshiring.');
+        alert(data.message);
       } else {
         let errorMsg = data.message || 'Noma\'lum xato';
         if (errorMsg.includes('Unauthorized')) {
           errorMsg = 'Bot tokeni noto\'g\'ri! BotFather dan tekshirib oling.';
-        } else if (errorMsg.includes('chat not found')) {
-          errorMsg = 'Chat ID topilmadi! Avval botga /start bosing yoki Chat ID ni tekshiring.';
         } else if (errorMsg.includes('bot was blocked')) {
           errorMsg = 'Bot bloklangan! Telegramda botga kirib /start bosing.';
         }
@@ -282,7 +288,7 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       console.error('Telegram test xatosi:', err);
-      alert('❌ Tarmoq xatosi: Server bilan bog\'lanib bo\'lmadi. Internet ulanishini tekshiring.');
+      alert('❌ Tarmoq xatosi: Server bilan bog\'lanib bo\'lmadi.');
     }
   };
 
@@ -358,7 +364,10 @@ export default function AdminDashboard() {
 
             <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
               <h4>Telegram Bot Sozlamalari</h4>
-              <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Hisobotlarni avtomatik Telegramga yuborish tizimini sozlash</p>
+              <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>Hisobotlarni avtomatik Telegramga yuborish tizimini sozlash</p>
+              {subscriberCount > 0 && (
+                <p style={{ fontSize: '0.85rem', color: 'var(--success)', marginBottom: '1rem' }}>👥 <strong>{subscriberCount}</strong> ta obunachi ulangan</p>
+              )}
               <button className="btn btn-outline" onClick={() => setShowTelegramModal(true)} style={{ width: '100%', padding: '0.8rem' }}>
                 Telegram botni ulash
               </button>
@@ -372,16 +381,30 @@ export default function AdminDashboard() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '10px' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ marginBottom: '0.5rem' }}>Telegram Bot Sozlamalari</h3>
-            <p style={{ fontSize: '0.85rem', marginBottom: '1.5rem' }}>Diqqat: "Test Xabar" ishlashi uchun siz avval Telegramda o'z botingizga kirib <b>/start</b> bosishingiz shart!</p>
+            
+            <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'left', fontSize: '0.85rem' }}>
+              <p style={{ margin: '0 0 8px 0' }}>📋 <strong>Qanday ishlaydi:</strong></p>
+              <p style={{ margin: '0 0 5px 0' }}>1. BotFather dan bot token oling</p>
+              <p style={{ margin: '0 0 5px 0' }}>2. "Saqlash" tugmasini bosing — webhook avtomatik o'rnatiladi</p>
+              <p style={{ margin: '0 0 5px 0' }}>3. Telegramda botingizni oching va <b>/start</b> bosing</p>
+              <p style={{ margin: 0 }}>4. Botga /start bergan <b>hamma</b>ga hisobot yuboriladi!</p>
+            </div>
             
             <div className="form-group" style={{ textAlign: 'left' }}>
               <label>Bot Tokeni (BotFather dan)</label>
               <input type="text" className="form-input" value={telegramSettings.telegramBotToken} onChange={e => setTelegramSettings({...telegramSettings, telegramBotToken: e.target.value})} placeholder="123456:ABC-DEF..." />
             </div>
-            <div className="form-group" style={{ textAlign: 'left', marginTop: '1rem' }}>
-              <label>Chat ID (O'zingizning raqamli ID'ingiz, @userinfobot dan oling)</label>
-              <input type="text" className="form-input" value={telegramSettings.telegramChatId} onChange={e => setTelegramSettings({...telegramSettings, telegramChatId: e.target.value})} placeholder="Masalan: 123456789" />
-            </div>
+
+            {subscriberCount > 0 && (
+              <div style={{ padding: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>👥 {subscriberCount} ta obunachi</span>
+              </div>
+            )}
+            {subscriberCount === 0 && telegramSettings.telegramBotToken && (
+              <div style={{ padding: '0.8rem', background: 'rgba(234, 179, 8, 0.1)', borderRadius: '8px', marginTop: '1rem', textAlign: 'center' }}>
+                <span style={{ color: '#eab308', fontSize: '0.85rem' }}>⚠️ Hali hech kim /start bosmagan. Avval saqlang, keyin botga /start bosing!</span>
+              </div>
+            )}
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '1rem' }}>
               <div className="form-group" style={{ textAlign: 'left' }}>
@@ -395,7 +418,7 @@ export default function AdminDashboard() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
-              <button className="btn btn-primary" onClick={handleTestTelegram} style={{ padding: '0.8rem' }}>Test Xabar Yuborib Ko'rish</button>
+              <button className="btn btn-primary" onClick={handleTestTelegram} style={{ padding: '0.8rem' }}>📨 Test Xabar Yuborish ({subscriberCount} ta obunachiga)</button>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn btn-success" onClick={() => { handleSaveTelegram(); setShowTelegramModal(false); }} style={{ flex: 1, padding: '0.8rem' }}>Saqlash</button>
                 <button className="btn btn-danger" onClick={() => setShowTelegramModal(false)} style={{ flex: 1, padding: '0.8rem' }}>Yopish</button>

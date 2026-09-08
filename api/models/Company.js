@@ -10,7 +10,13 @@ const companySchema = new mongoose.Schema({
     lng: { type: Number }
   },
   telegramBotToken: { type: String, default: '' },
-  telegramChatId: { type: String, default: '' },
+  telegramChatId: { type: String, default: '' }, // Eski field - backward compat
+  telegramSubscribers: [{
+    chatId: { type: String, required: true },
+    firstName: { type: String, default: '' },
+    username: { type: String, default: '' },
+    joinedAt: { type: Date, default: Date.now }
+  }],
   reportTimeKeldi: { type: String, default: '11:00' },
   reportTimeKetdi: { type: String, default: '19:00' },
   adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

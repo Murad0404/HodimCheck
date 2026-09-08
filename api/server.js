@@ -8,6 +8,7 @@ const companyRoutes = require('./routes/company');
 const attendanceRoutes = require('./routes/attendance');
 const leaveRoutes = require('./routes/leave');
 const cronRoutes = require('./routes/cron');
+const telegramRoutes = require('./routes/telegram');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/company', companyRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/cron', cronRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {

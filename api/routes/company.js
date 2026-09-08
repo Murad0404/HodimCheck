@@ -116,18 +116,16 @@ router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// Telegram sozlamalarini saqlash
+// Telegram sozlamalarini saqlash + Webhook o'rnatish
 router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi } = req.body;
+    const { telegramBotToken, reportTimeKeldi, reportTimeKetdi } = req.body;
     const cleanToken = (telegramBotToken || '').trim();
-    const cleanChatId = (telegramChatId || '').trim();
     
     const company = await Company.findByIdAndUpdate(
       req.params.id, 
       { 
         telegramBotToken: cleanToken, 
-        telegramChatId: cleanChatId, 
         reportTimeKeldi, 
         reportTimeKetdi 
       }, 
@@ -136,25 +134,50 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
     
-    // Serverdan Telegramga tasdiqlash xabari yuborish (CORS xatosidan qochish uchun)
-    if (cleanToken && cleanChatId) {
+    // Telegram webhook'ni o'rnatamiz
+    let webhookSet = false;
+    if (cleanToken) {
       try {
-        const tgUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
-        await fetchFn(tgUrl, {
+        // Webhook URL - Vercel domain + companyId
+        const host = req.headers.host || 'hodim-check.vercel.app';
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        const webhookUrl = `${protocol}://${host}/api/telegram/webhook/${company._id}`;
+        
+        console.log('Webhook URL o\'rnatilmoqda:', webhookUrl);
+        
+        const tgUrl = `https://api.telegram.org/bot${cleanToken}/setWebhook`;
+        const webhookRes = await fetchFn(tgUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: cleanChatId,
-            text: `✅ <b>HodimCheck</b> tizimi muvaffaqiyatli ulandi!\n\n⏰ Kelganlar hisoboti: <b>${reportTimeKeldi}</b> da yuboriladi\n⏰ Ketganlar hisoboti: <b>${reportTimeKetdi}</b> da yuboriladi\n\nSozlamalar saqlandi.`,
-            parse_mode: 'HTML'
+            url: webhookUrl,
+            allowed_updates: ['message']
           })
         });
+        
+        const webhookData = await webhookRes.json();
+        console.log('Webhook natija:', JSON.stringify(webhookData));
+        webhookSet = webhookData.ok;
+        
+        if (!webhookData.ok) {
+          return res.json({ 
+            message: 'Sozlamalar saqlandi, lekin webhook o\'rnatilmadi: ' + (webhookData.description || ''),
+            webhookSet: false,
+            subscriberCount: company.telegramSubscribers?.length || 0
+          });
+        }
       } catch (tgErr) {
-        console.error('Telegram xabari yuborilmadi:', tgErr);
+        console.error('Webhook o\'rnatishda xato:', tgErr);
       }
     }
     
-    res.json({ message: 'Telegram sozlamalari saqlandi' });
+    res.json({ 
+      message: webhookSet 
+        ? 'Telegram sozlamalari saqlandi va webhook muvaffaqiyatli o\'rnatildi!' 
+        : 'Sozlamalar saqlandi',
+      webhookSet,
+      subscriberCount: company.telegramSubscribers?.length || 0
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });

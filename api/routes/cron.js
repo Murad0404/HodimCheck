@@ -7,6 +7,31 @@ const Attendance = require('../models/Attendance');
 // fetch fallback for older Node.js versions
 const fetchFn = typeof fetch !== 'undefined' ? fetch : (...args) => import('node-fetch').then(mod => mod.default(...args));
 
+// Barcha subscriberlarga xabar yuborish funksiyasi
+async function broadcastMessage(botToken, subscribers, message) {
+  const results = [];
+  const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  
+  for (const sub of subscribers) {
+    try {
+      const tgRes = await fetchFn(telegramUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: sub.chatId,
+          text: message,
+          parse_mode: 'HTML'
+        })
+      });
+      const tgData = await tgRes.json();
+      results.push({ chatId: sub.chatId, name: sub.firstName, success: tgRes.ok, error: tgData.description });
+    } catch (err) {
+      results.push({ chatId: sub.chatId, name: sub.firstName, success: false, error: err.message });
+    }
+  }
+  return results;
+}
+
 router.get('/send-reports', async (req, res) => {
   try {
     // Toshkent vaqti bilan hozirgi soatni olamiz
@@ -21,7 +46,7 @@ router.get('/send-reports', async (req, res) => {
         { reportTimeKetdi: { $regex: `^${timePrefix}` } }
       ],
       telegramBotToken: { $ne: '' },
-      telegramChatId: { $ne: '' }
+      'telegramSubscribers.0': { $exists: true } // Kamida 1 ta subscriber bo'lishi kerak
     });
 
     const results = [];
@@ -82,23 +107,15 @@ router.get('/send-reports', async (req, res) => {
         }
       }
 
-      // Telegramga yuborish
-      const telegramUrl = `https://api.telegram.org/bot${company.telegramBotToken}/sendMessage`;
-      try {
-        const tgRes = await fetchFn(telegramUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: company.telegramChatId,
-            text: message,
-            parse_mode: 'HTML'
-          })
-        });
-        const tgData = await tgRes.json();
-        results.push({ company: company.name, success: tgRes.ok, error: tgData.description });
-      } catch (err) {
-        results.push({ company: company.name, success: false, error: err.message });
-      }
+      // Barcha subscriberlarga broadcast qilish
+      const broadcastResults = await broadcastMessage(company.telegramBotToken, company.telegramSubscribers, message);
+      results.push({ 
+        company: company.name, 
+        subscriberCount: company.telegramSubscribers.length,
+        sent: broadcastResults.filter(r => r.success).length,
+        failed: broadcastResults.filter(r => !r.success).length,
+        details: broadcastResults
+      });
     }
 
     res.json({ message: 'Cron tugadi', processed: companies.length, results });
@@ -108,45 +125,45 @@ router.get('/send-reports', async (req, res) => {
   }
 });
 
-// Admin panelida test xabar yuborish uchun
+// Admin panelida test xabar yuborish uchun (barcha subscriberlarga)
 router.post('/test-telegram', async (req, res) => {
   try {
-    const { token, chatId } = req.body;
-    console.log('Test telegram so\'rov keldi:', { token: token ? token.substring(0, 10) + '...' : 'YO\'Q', chatId });
+    const { token, companyId } = req.body;
+    console.log('Test telegram so\'rov keldi:', { token: token ? token.substring(0, 10) + '...' : 'YO\'Q', companyId });
     
-    if (!token || !chatId) {
-      return res.status(400).json({ message: 'Token yoki Chat ID yetishmayapti' });
+    if (!token || !companyId) {
+      return res.status(400).json({ message: 'Token yoki kompaniya ID yetishmayapti' });
     }
     
     const cleanToken = token.trim();
-    const cleanChatId = chatId.trim();
     
-    if (!cleanToken || !cleanChatId) {
-      return res.status(400).json({ message: 'Token yoki Chat ID bo\'sh' });
+    // Kompaniyaning subscriberlarini olamiz
+    const company = await Company.findById(companyId);
+    if (!company) {
+      return res.status(404).json({ message: 'Kompaniya topilmadi' });
     }
     
-    const telegramUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
-    console.log('Telegram API ga so\'rov yuborilmoqda...');
+    if (!company.telegramSubscribers || company.telegramSubscribers.length === 0) {
+      return res.status(400).json({ 
+        message: 'Hali hech kim botga /start bosmagan. Avval Telegramda botni oching va /start bosing!' 
+      });
+    }
     
-    const tgRes = await fetchFn(telegramUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: cleanChatId,
-        text: '✅ <b>HodimCheck</b> tizimidan test xabar!\nSizning botingiz muvaffaqiyatli ulandi.',
-        parse_mode: 'HTML'
-      })
-    });
+    const message = `✅ <b>HodimCheck</b> tizimidan test xabar!\n\n🏢 Kompaniya: <b>${company.name}</b>\n👥 Obunachi: <b>${company.telegramSubscribers.length}</b> ta\n\nBotingiz muvaffaqiyatli ishlayapti!`;
     
-    const tgData = await tgRes.json();
-    console.log('Telegram javob:', JSON.stringify(tgData));
+    const broadcastResults = await broadcastMessage(cleanToken, company.telegramSubscribers, message);
     
-    if (tgRes.ok) {
-      res.json({ message: 'Test xabar yuborildi!' });
+    const successCount = broadcastResults.filter(r => r.success).length;
+    const failCount = broadcastResults.filter(r => !r.success).length;
+    
+    if (successCount > 0) {
+      res.json({ 
+        message: `✅ ${successCount} ta obunachiga test xabar yuborildi!${failCount > 0 ? ` (${failCount} ta muvaffaqiyatsiz)` : ''}`,
+        results: broadcastResults
+      });
     } else {
-      const errorMsg = tgData.description || 'Telegram xatosi';
-      console.error('Telegram xatosi:', errorMsg);
-      res.status(400).json({ message: errorMsg, error_code: tgData.error_code });
+      const firstError = broadcastResults[0]?.error || 'Noma\'lum xato';
+      res.status(400).json({ message: 'Xabar yuborilmadi: ' + firstError, results: broadcastResults });
     }
   } catch (error) {
     console.error('Test telegram xatosi:', error);
