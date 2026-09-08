@@ -217,6 +217,13 @@ export default function AdminDashboard() {
   };
 
   const handleSaveTelegram = async () => {
+    const currentToken = telegramSettings.telegramBotToken.trim();
+    const currentChatId = telegramSettings.telegramChatId.trim();
+
+    if (!currentToken || !currentChatId) {
+      alert('Iltimos Bot Tokeni va Chat ID ni kiriting!');
+      return;
+    }
     try {
       const res = await fetch(`/api/company/${user.companyId}/telegram`, {
         method: 'PUT',
@@ -224,11 +231,25 @@ export default function AdminDashboard() {
         body: JSON.stringify(telegramSettings)
       });
       if (res.ok) {
-        alert('Telegram sozlamalari saqlandi');
+        // Saqlangandan keyin botga tasdiqlash xabari yuboramiz
+        const keldiVaqt = telegramSettings.reportTimeKeldi;
+        const ketdiVaqt = telegramSettings.reportTimeKetdi;
+        const telegramUrl = `https://api.telegram.org/bot${currentToken}/sendMessage`;
+        await fetch(telegramUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: currentChatId,
+            text: `✅ <b>HodimCheck</b> tizimi muvaffaqiyatli ulandi!\n\n⏰ Kelganlar hisoboti: <b>${keldiVaqt}</b> da yuboriladi\n⏰ Ketganlar hisoboti: <b>${ketdiVaqt}</b> da yuboriladi\n\nSozlamalar saqlandi.`,
+            parse_mode: 'HTML'
+          })
+        });
+      } else {
+        alert('❌ Saqlashda xatolik yuz berdi');
       }
     } catch (err) {
       console.error(err);
-      alert('Xatolik yuz berdi');
+      alert('Tarmoq xatosi.');
     }
   };
 
