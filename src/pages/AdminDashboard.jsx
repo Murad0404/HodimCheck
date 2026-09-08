@@ -25,6 +25,7 @@ export default function AdminDashboard() {
     reportTimeKeldi: '11:00',
     reportTimeKetdi: '19:00'
   });
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
 
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -322,31 +323,47 @@ export default function AdminDashboard() {
 
             <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
               <h4>Telegram Bot Sozlamalari</h4>
-              <p style={{ fontSize: '0.9rem' }}>Bot orqali avtomatik hisobotlar qabul qilish (masalan, 11:00 da kelganlar, 19:00 da ketganlar)</p>
-              
-              <div className="form-group" style={{ textAlign: 'left', marginTop: '1rem' }}>
-                <label>Bot Tokeni (BotFather dan)</label>
-                <input type="text" className="form-input" value={telegramSettings.telegramBotToken} onChange={e => setTelegramSettings({...telegramSettings, telegramBotToken: e.target.value})} placeholder="123456:ABC-DEF..." />
+              <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Hisobotlarni avtomatik Telegramga yuborish tizimini sozlash</p>
+              <button className="btn btn-outline" onClick={() => setShowTelegramModal(true)} style={{ width: '100%', padding: '0.8rem' }}>
+                Telegram botni ulash
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Telegram Modal */}
+      {showTelegramModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '10px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: '0.5rem' }}>Telegram Bot Sozlamalari</h3>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1.5rem' }}>Diqqat: "Test Xabar" ishlashi uchun siz avval Telegramda o'z botingizga kirib <b>/start</b> bosishingiz shart!</p>
+            
+            <div className="form-group" style={{ textAlign: 'left' }}>
+              <label>Bot Tokeni (BotFather dan)</label>
+              <input type="text" className="form-input" value={telegramSettings.telegramBotToken} onChange={e => setTelegramSettings({...telegramSettings, telegramBotToken: e.target.value})} placeholder="123456:ABC-DEF..." />
+            </div>
+            <div className="form-group" style={{ textAlign: 'left', marginTop: '1rem' }}>
+              <label>Chat ID (O'zingizning raqamli ID'ingiz, @userinfobot dan oling)</label>
+              <input type="text" className="form-input" value={telegramSettings.telegramChatId} onChange={e => setTelegramSettings({...telegramSettings, telegramChatId: e.target.value})} placeholder="Masalan: 123456789" />
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '1rem' }}>
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label>"Keldi" Vaqti</label>
+                <input type="time" className="form-input" value={telegramSettings.reportTimeKeldi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKeldi: e.target.value})} />
               </div>
               <div className="form-group" style={{ textAlign: 'left' }}>
-                <label>Chat ID (Kanal yoki Guruh yoki ID)</label>
-                <input type="text" className="form-input" value={telegramSettings.telegramChatId} onChange={e => setTelegramSettings({...telegramSettings, telegramChatId: e.target.value})} placeholder="-100123456789" />
+                <label>"Ketdi" Vaqti</label>
+                <input type="time" className="form-input" value={telegramSettings.reportTimeKetdi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKetdi: e.target.value})} />
               </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-group" style={{ textAlign: 'left' }}>
-                  <label>"Keldi" Vaqti</label>
-                  <input type="time" className="form-input" value={telegramSettings.reportTimeKeldi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKeldi: e.target.value})} />
-                </div>
-                <div className="form-group" style={{ textAlign: 'left' }}>
-                  <label>"Ketdi" Vaqti</label>
-                  <input type="time" className="form-input" value={telegramSettings.reportTimeKetdi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKetdi: e.target.value})} />
-                </div>
-              </div>
+            </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button className="btn btn-primary" onClick={handleSaveTelegram} style={{ flex: 1, padding: '0.8rem' }}>Saqlash</button>
-                <button className="btn btn-outline" onClick={handleTestTelegram} style={{ flex: 1, padding: '0.8rem' }}>Test Xabar</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
+              <button className="btn btn-primary" onClick={handleTestTelegram} style={{ padding: '0.8rem' }}>Test Xabar Yuborib Ko'rish</button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button className="btn btn-success" onClick={() => { handleSaveTelegram(); setShowTelegramModal(false); }} style={{ flex: 1, padding: '0.8rem' }}>Saqlash</button>
+                <button className="btn btn-danger" onClick={() => setShowTelegramModal(false)} style={{ flex: 1, padding: '0.8rem' }}>Yopish</button>
               </div>
             </div>
           </div>
