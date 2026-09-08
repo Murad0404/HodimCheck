@@ -230,22 +230,9 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(telegramSettings)
       });
-      if (res.ok) {
-        // Saqlangandan keyin botga tasdiqlash xabari yuboramiz
-        const keldiVaqt = telegramSettings.reportTimeKeldi;
-        const ketdiVaqt = telegramSettings.reportTimeKetdi;
-        const telegramUrl = `https://api.telegram.org/bot${currentToken}/sendMessage`;
-        await fetch(telegramUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: currentChatId,
-            text: `✅ <b>HodimCheck</b> tizimi muvaffaqiyatli ulandi!\n\n⏰ Kelganlar hisoboti: <b>${keldiVaqt}</b> da yuboriladi\n⏰ Ketganlar hisoboti: <b>${ketdiVaqt}</b> da yuboriladi\n\nSozlamalar saqlandi.`,
-            parse_mode: 'HTML'
-          })
-        });
-      } else {
-        alert('❌ Saqlashda xatolik yuz berdi');
+      const data = await res.json();
+      if (!res.ok) {
+        alert('❌ ' + (data.message || 'Saqlashda xatolik'));
       }
     } catch (err) {
       console.error(err);

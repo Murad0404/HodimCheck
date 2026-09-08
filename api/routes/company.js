@@ -117,13 +117,39 @@ router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) =>
 router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi } = req.body;
+    const cleanToken = (telegramBotToken || '').trim();
+    const cleanChatId = (telegramChatId || '').trim();
+    
     const company = await Company.findByIdAndUpdate(
       req.params.id, 
-      { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi }, 
+      { 
+        telegramBotToken: cleanToken, 
+        telegramChatId: cleanChatId, 
+        reportTimeKeldi, 
+        reportTimeKetdi 
+      }, 
       { new: true }
     );
     
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
+    
+    // Serverdan Telegramga tasdiqlash xabari yuborish (CORS xatosidan qochish uchun)
+    if (cleanToken && cleanChatId) {
+      try {
+        const tgUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
+        await fetch(tgUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cleanChatId,
+            text: `✅ <b>HodimCheck</b> tizimi muvaffaqiyatli ulandi!\n\n⏰ Kelganlar hisoboti: <b>${reportTimeKeldi}</b> da yuboriladi\n⏰ Ketganlar hisoboti: <b>${reportTimeKetdi}</b> da yuboriladi\n\nSozlamalar saqlandi.`,
+            parse_mode: 'HTML'
+          })
+        });
+      } catch (tgErr) {
+        console.error('Telegram xabari yuborilmadi:', tgErr);
+      }
+    }
     
     res.json({ message: 'Telegram sozlamalari saqlandi' });
   } catch (error) {
