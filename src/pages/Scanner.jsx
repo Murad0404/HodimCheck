@@ -83,8 +83,8 @@ export default function Scanner() {
       navigator.geolocation.getCurrentPosition((position) => {
         const { latitude, longitude } = position.coords;
         const distance = getDistanceFromLatLonInM(latitude, longitude, companyData.location.lat, companyData.location.lng);
-        if (distance > 150) {
-          alert(`Siz ofisdan uzoqdasiz (${Math.round(distance)} metr). Faqat ofis atrofida (150m) skaner qilish mumkin.`);
+        if (distance > 100) {
+          alert(`Siz ofisdan uzoqdasiz (${Math.round(distance)} metr). Faqat ofis atrofida (100m) skaner qilish mumkin.`);
           setStatus('');
         } else {
           setStatus('');

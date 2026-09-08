@@ -189,3 +189,128 @@ p {
 .gap-2 { gap: 0.5rem; }
 .gap-4 { gap: 1rem; }
 .w-full { width: 100%; }
+
+/* Responsive Admin Dashboard */
+.admin-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.admin-tabs .btn {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.add-user-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.add-user-form > div {
+  flex: 1;
+  min-width: 200px;
+}
+
+.request-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.request-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.qr-container {
+  background: white;
+  padding: 20px;
+  display: inline-block;
+  border-radius: 10px;
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+.qr-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 768px) {
+  .admin-container {
+    padding: 1rem 0.5rem;
+  }
+  
+  .glass-panel {
+    padding: 1.25rem !important;
+  }
+  
+  .admin-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+    text-align: center;
+  }
+  
+  .admin-header button {
+    width: 100% !important;
+    justify-content: center;
+  }
+
+  .add-user-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .add-user-form > div {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  .add-user-form button {
+    width: 100%;
+  }
+
+  .request-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .request-actions {
+    flex-direction: column;
+  }
+  
+  .request-actions button {
+    width: 100% !important;
+  }
+  
+  table th, table td {
+    padding: 8px 4px !important;
+    font-size: 0.85rem;
+  }
+}
