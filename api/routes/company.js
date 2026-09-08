@@ -94,6 +94,25 @@ router.put('/:id/faceid', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
+// Ofis lokatsiyasini o'zgartirish
+router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { lat, lng } = req.body;
+    const company = await Company.findByIdAndUpdate(
+      req.params.id, 
+      { location: { lat, lng } }, 
+      { new: true }
+    );
+    
+    if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
+    
+    res.json({ message: 'Lokatsiya saqlandi', location: company.location });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server xatosi' });
+  }
+});
+
 // Xodimlarni ro'yxatini olish
 router.get('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {

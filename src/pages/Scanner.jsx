@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { LogOut, ScanFace, QrCode, Calendar, Clock, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { LogOut, QrCode, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FaceScanner from '../components/FaceScanner';
 
@@ -16,7 +16,6 @@ export default function Scanner() {
   const [leaveReason, setLeaveReason] = useState('');
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [leaveError, setLeaveError] = useState('');
-  const [userData, setUserData] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const token = localStorage.getItem('token');
@@ -40,7 +39,7 @@ export default function Scanner() {
       const data = await res.json();
       setCompanyData(data);
       if (data.faceIdEnabled && !user.faceDescriptor) {
-        // If face is enabled but not registered, force scanner mode
+        // If face is enabled but not registered, force scanner mode without loc check for registration
         setView('scanner');
         setFaceCheckRequired('register');
       }
@@ -56,37 +55,87 @@ export default function Scanner() {
       });
       const data = await res.json();
       setLeaveRequests(Array.isArray(data) ? data : []);
-      
-      // Also fetch updated user info for day off counts (we can use the login payload or just fetch it here. Since there isn't a dedicated /me endpoint, we'll extract it from the requests context or rely on localstorage, but localstorage might be stale. We can fetch users list if we had permission, but we don't. For now, we will just use the token user data, but wait, usedDayOffs isn't in token).
     } catch (err) {
       console.error(err);
     }
   };
 
-  useEffect(() => {
-    if (view === 'scanner' && !faceCheckRequired && companyData && !scanResult) {
-      const scanner = new Html5QrcodeScanner('reader', { 
-        qrbox: { width: 250, height: 250 }, 
-        fps: 5 
+  const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c * 1000; // in meters
+  };
+
+  const handleOpenScanner = () => {
+    if (!companyData) return;
+    if (companyData.location && companyData.location.lat) {
+      if (!navigator.geolocation) {
+        alert('Sizning qurilmangizda lokatsiya aniqlash imkoni yo\'q');
+        return;
+      }
+      setStatus('Lokatsiya tekshirilmoqda...');
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        const distance = getDistanceFromLatLonInM(latitude, longitude, companyData.location.lat, companyData.location.lng);
+        if (distance > 150) {
+          alert(`Siz ofisdan uzoqdasiz (${Math.round(distance)} metr). Faqat ofis atrofida (150m) skaner qilish mumkin.`);
+          setStatus('');
+        } else {
+          setStatus('');
+          setView('scanner');
+        }
+      }, (err) => {
+        alert('Lokatsiyani aniqlash uchun ruxsat bering, aks holda skaner ochilmaydi');
+        setStatus('');
       });
-      
-      scanner.render(
-        (decodedText) => {
-          scanner.clear();
-          setScanResult(decodedText);
-          if (companyData.faceIdEnabled) {
-            setFaceCheckRequired('verify');
-          } else {
-            markAttendance(decodedText, 'keldi', false); // Default logic
-          }
-        },
-        (err) => {}
-      );
-      
-      return () => {
-        scanner.clear().catch(e => console.error(e));
-      };
+    } else {
+      // No location restriction set by admin
+      setView('scanner');
     }
+  };
+
+  useEffect(() => {
+    let html5QrCode;
+    
+    if (view === 'scanner' && !faceCheckRequired && companyData && !scanResult) {
+      html5QrCode = new Html5Qrcode('reader');
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        (decodedText) => {
+          if(html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+              setScanResult(decodedText);
+              if (companyData.faceIdEnabled) {
+                setFaceCheckRequired('verify');
+              } else {
+                markAttendance(decodedText, 'keldi', false);
+              }
+            }).catch(e => console.error(e));
+          }
+        }, 
+        (errorMessage) => {
+          // ignore parsing errors
+        }
+      ).catch(err => {
+        console.error('Kamerani ochishda xatolik', err);
+        setStatus('Kamerani ochishda xatolik. Ruxsat berilganligini tekshiring.');
+      });
+    }
+    
+    return () => {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(e => console.error(e));
+      }
+    };
   }, [view, faceCheckRequired, companyData, scanResult]);
 
   const markAttendance = async (qrData, type, faceVerified) => {
@@ -153,7 +202,10 @@ export default function Scanner() {
       <div className="glass-panel flex" style={{ flexDirection: 'column', height: '100%', padding: '1rem' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="flex items-center gap-2" style={{margin:0}}><QrCode /> Skaner</h3>
-          <button onClick={() => setView('dashboard')} className="btn btn-outline" style={{ width: 'auto', padding: '0.4rem 1rem' }}>
+          <button onClick={() => {
+            setView('dashboard');
+            setStatus('');
+          }} className="btn btn-outline" style={{ width: 'auto', padding: '0.4rem 1rem' }}>
             Yopish
           </button>
         </div>
@@ -162,7 +214,9 @@ export default function Scanner() {
           {status ? (
             <div className="text-center">
               <h2>{status}</h2>
-              <button className="btn btn-primary mt-4" onClick={() => {setStatus(''); setScanResult(null); setFaceCheckRequired(false)}}>Qayta urinish</button>
+              {(status.includes('Xato') || status.includes('xatolik')) && (
+                <button className="btn btn-primary mt-4" onClick={() => {setStatus(''); setScanResult(null); setFaceCheckRequired(false)}}>Qayta urinish</button>
+              )}
             </div>
           ) : faceCheckRequired === 'register' ? (
             <FaceScanner mode="register" onComplete={() => setFaceCheckRequired(false)} />
@@ -181,7 +235,7 @@ export default function Scanner() {
             }} />
           ) : !scanResult ? (
             <div className="text-center">
-              <p className="mb-4">Kompaniya QR kodini skaner qiling</p>
+              <p className="mb-4">Kompaniya QR kodiga qarating</p>
               <div id="reader" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden' }}></div>
             </div>
           ) : null}
@@ -245,9 +299,11 @@ export default function Scanner() {
           <LogOut size={20} />
         </button>
       </div>
+      
+      {status && <div style={{ color: 'var(--primary)', textAlign: 'center', fontWeight: 'bold' }}>{status}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="btn-icon-large" onClick={() => setView('scanner')}>
+        <div className="btn-icon-large" onClick={handleOpenScanner}>
           <QrCode size={40} />
           <span>QR Skaner</span>
         </div>

@@ -141,6 +141,34 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSetLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Sizning qurilmangizda lokatsiya aniqlash imkoni yo\'q');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const { latitude, longitude } = position.coords;
+      try {
+        const res = await fetch(`/api/company/${user.companyId}/location`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ lat: latitude, lng: longitude })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setCompany({ ...company, location: data.location });
+          alert('Ofis lokatsiyasi saqlandi!');
+        } else {
+          alert(data.message);
+        }
+      } catch (err) {
+        alert('Server xatosi');
+      }
+    }, () => {
+      alert('Lokatsiyani aniqlash uchun ruxsat bering');
+    });
+  };
+
   const toggleFaceId = async (enabled) => {
     try {
       await fetch(`/api/company/${user.companyId}/faceid`, {
@@ -164,23 +192,23 @@ export default function AdminDashboard() {
             <h2 style={{ margin: 0 }}>{company.name} Admin Paneli</h2>
             <p style={{ margin: 0, opacity: 0.7 }}>Kompaniya kodi: <strong>{company.companyCode}</strong></p>
           </div>
-          <button onClick={handleLogout} className="btn btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={handleLogout} className="btn btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: 'auto' }}>
             <LogOut size={18} /> Chiqish
           </button>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-        <button className={`btn ${activeTab === 'main' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('main')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
+        <button className={`btn ${activeTab === 'main' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('main')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
           <Settings size={20} /> Asosiy sozlamalar
         </button>
-        <button className={`btn ${activeTab === 'users' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('users')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
+        <button className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('users')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
           <Users size={20} /> Xodimlar
         </button>
-        <button className={`btn ${activeTab === 'attendance' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('attendance')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
+        <button className={`btn ${activeTab === 'attendance' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('attendance')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
           <CalendarDays size={20} /> Davomat Tarixi
         </button>
-        <button className={`btn ${activeTab === 'requests' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('requests')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
+        <button className={`btn ${activeTab === 'requests' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('requests')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
           <CalendarDays size={20} /> So'rovlar
         </button>
       </div>
@@ -189,21 +217,40 @@ export default function AdminDashboard() {
         <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
           <h3>Kompaniya QR Kodi</h3>
           <p>Xodimlar shu kodni skaner qilib keldi-ketdi qiladilar</p>
-          <div style={{ background: 'white', padding: '20px', display: 'inline-block', borderRadius: '10px', marginTop: '1rem' }}>
+          <div style={{ background: 'white', padding: '20px', display: 'inline-block', borderRadius: '10px', margin: '1rem 0' }}>
             <QRCodeSVG value={company.qrCodeData} size={250} />
           </div>
           
-          <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-            <h4>Qo'shimcha Sozlamalar</h4>
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' }}>
-              <input 
-                type="checkbox" 
-                checked={company.faceIdEnabled} 
-                onChange={(e) => toggleFaceId(e.target.checked)} 
-                style={{ width: '20px', height: '20px' }}
-              />
-              Face ID yordamida tasdiqlashni majburiy qilish
-            </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '2rem' }}>
+            <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+              <h4>Lokatsiya Nazorati</h4>
+              <p style={{ fontSize: '0.9rem' }}>Xodimlar faqat ofis atrofida (150m radius) QR skaner qila olishadi.</p>
+              {company.location?.lat ? (
+                <div style={{ margin: '1rem 0', color: 'var(--success)' }}>
+                  <strong>Ofis lokatsiyasi o'rnatilgan:</strong> {company.location.lat.toFixed(6)}, {company.location.lng.toFixed(6)}
+                </div>
+              ) : (
+                <div style={{ margin: '1rem 0', color: 'var(--danger)' }}>
+                  Ofis lokatsiyasi hali o'rnatilmagan! Xodimlar hozir hamma joydan skaner qila olishadi.
+                </div>
+              )}
+              <button className="btn btn-primary" onClick={handleSetLocation} style={{ width: 'auto', padding: '0.8rem 1.5rem' }}>
+                Hozirgi turgan joyni ofis deb saqlash
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+              <h4>Face ID Sozlamalari</h4>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', marginTop: '1rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={company.faceIdEnabled} 
+                  onChange={(e) => toggleFaceId(e.target.checked)} 
+                  style={{ width: '20px', height: '20px' }}
+                />
+                Face ID yordamida tasdiqlashni majburiy qilish
+              </label>
+            </div>
           </div>
         </div>
       )}
