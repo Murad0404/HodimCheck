@@ -122,6 +122,28 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     const { telegramBotToken, reportTimeKeldi, reportTimeKetdi } = req.body;
     const cleanToken = (telegramBotToken || '').trim();
     
+    // Avval tokenni Telegram API bilan tekshiramiz
+    if (cleanToken) {
+      try {
+        const checkRes = await fetchFn(`https://api.telegram.org/bot${cleanToken}/getMe`);
+        const checkData = await checkRes.json();
+        if (!checkData.ok) {
+          return res.status(400).json({ 
+            message: 'Bot tokeni noto\'g\'ri! BotFather dan to\'g\'ri tokenni oling.',
+            webhookSet: false,
+            subscriberCount: 0
+          });
+        }
+        console.log('Bot tekshirildi:', checkData.result.username);
+      } catch (checkErr) {
+        return res.status(400).json({ 
+          message: 'Telegram bilan bog\'lanib bo\'lmadi. Tokenni tekshiring.',
+          webhookSet: false,
+          subscriberCount: 0
+        });
+      }
+    }
+    
     const company = await Company.findByIdAndUpdate(
       req.params.id, 
       { 
@@ -136,6 +158,7 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     
     // Telegram webhook'ni o'rnatamiz
     let webhookSet = false;
+    let botUsername = '';
     if (cleanToken) {
       try {
         // Webhook URL - Vercel domain + companyId
@@ -159,10 +182,16 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
         console.log('Webhook natija:', JSON.stringify(webhookData));
         webhookSet = webhookData.ok;
         
+        // Bot username'ni olamiz
+        const meRes = await fetchFn(`https://api.telegram.org/bot${cleanToken}/getMe`);
+        const meData = await meRes.json();
+        if (meData.ok) botUsername = meData.result.username;
+        
         if (!webhookData.ok) {
           return res.json({ 
             message: 'Sozlamalar saqlandi, lekin webhook o\'rnatilmadi: ' + (webhookData.description || ''),
             webhookSet: false,
+            botUsername,
             subscriberCount: company.telegramSubscribers?.length || 0
           });
         }
@@ -173,9 +202,10 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     
     res.json({ 
       message: webhookSet 
-        ? 'Telegram sozlamalari saqlandi va webhook muvaffaqiyatli o\'rnatildi!' 
+        ? `Bot @${botUsername} muvaffaqiyatli ulandi! Endi Telegramda botga /start bosing.`
         : 'Sozlamalar saqlandi',
       webhookSet,
+      botUsername,
       subscriberCount: company.telegramSubscribers?.length || 0
     });
   } catch (error) {
