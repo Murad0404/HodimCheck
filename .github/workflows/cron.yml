@@ -1,0 +1,17 @@
+name: Hourly Telegram Report Cron
+
+on:
+  schedule:
+    # Har soatda ishlaydi
+    - cron: '0 * * * *'
+  workflow_dispatch: # Qolda ham ishga tushirish tugmasi bo'lishi uchun
+
+jobs:
+  ping-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send API Request
+        run: |
+          echo "Sending cron request..."
+          # Saytingiz domenini bu yerga yozamiz (odatda Vercel bergan domen)
+          curl -s https://hodim-check.vercel.app/api/cron/send-reports

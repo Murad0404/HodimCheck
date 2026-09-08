@@ -135,7 +135,12 @@ router.post('/test-telegram', async (req, res) => {
       return res.status(400).json({ message: 'Token yoki kompaniya ID yetishmayapti' });
     }
     
-    const cleanToken = token.trim();
+    let cleanToken = token.trim();
+    // Agar foydalanuvchi butun boshli "@botname: token" ni tashlab qo'ysa, tokenni ajratib olamiz
+    const tokenMatch = cleanToken.match(/(\d+:[a-zA-Z0-9_-]+)/);
+    if (tokenMatch) {
+      cleanToken = tokenMatch[1];
+    }
     
     // Kompaniyaning subscriberlarini olamiz
     const company = await Company.findById(companyId);

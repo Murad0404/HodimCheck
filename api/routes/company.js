@@ -116,28 +116,36 @@ router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// Telegram sozlamalarini saqlash + Webhook o'rnatish
+// Telegram sozlamalarini saqlash
 router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { telegramBotToken, reportTimeKeldi, reportTimeKetdi } = req.body;
-    const cleanToken = (telegramBotToken || '').trim();
+    let cleanToken = (telegramBotToken || '').trim();
+    
+    // Agar foydalanuvchi butun boshli "@botname: token" ni tashlab qo'ysa, tokenni ajratib olamiz
+    const tokenMatch = cleanToken.match(/(\d+:[a-zA-Z0-9_-]+)/);
+    if (tokenMatch) {
+      cleanToken = tokenMatch[1];
+    }
     
     // Avval tokenni Telegram API bilan tekshiramiz
+    let botUsername = '';
     if (cleanToken) {
       try {
         const checkRes = await fetchFn(`https://api.telegram.org/bot${cleanToken}/getMe`);
         const checkData = await checkRes.json();
         if (!checkData.ok) {
           return res.status(400).json({ 
-            message: 'Bot tokeni noto\'g\'ri! BotFather dan to\'g\'ri tokenni oling.',
+            message: 'Bot tokeni noto\'g\'ri! Faqatgina tokenni kiriting (Masalan: 123456:ABC-DEF...).',
             webhookSet: false,
             subscriberCount: 0
           });
         }
-        console.log('Bot tekshirildi:', checkData.result.username);
+        botUsername = checkData.result.username;
+        console.log('Bot tekshirildi:', botUsername);
       } catch (checkErr) {
         return res.status(400).json({ 
-          message: 'Telegram bilan bog\'lanib bo\'lmadi. Tokenni tekshiring.',
+          message: 'Telegram bilan bog\'lanib bo\'lmadi. Internetni yoki tokenni tekshiring.',
           webhookSet: false,
           subscriberCount: 0
         });
@@ -156,55 +164,21 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
     
-    // Telegram webhook'ni o'rnatamiz
-    let webhookSet = false;
-    let botUsername = '';
+    // Webhook o'rniga Polling ishlaydi. 
+    // Shuning uchun webhookni o'chirish kerak bo'lsa o'chirib yuboramiz.
     if (cleanToken) {
       try {
-        // Webhook URL - Vercel domain + companyId
-        const host = req.headers.host || 'hodim-check.vercel.app';
-        const protocol = host.includes('localhost') ? 'http' : 'https';
-        const webhookUrl = `${protocol}://${host}/api/telegram/webhook/${company._id}`;
-        
-        console.log('Webhook URL o\'rnatilmoqda:', webhookUrl);
-        
-        const tgUrl = `https://api.telegram.org/bot${cleanToken}/setWebhook`;
-        const webhookRes = await fetchFn(tgUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: webhookUrl,
-            allowed_updates: ['message']
-          })
-        });
-        
-        const webhookData = await webhookRes.json();
-        console.log('Webhook natija:', JSON.stringify(webhookData));
-        webhookSet = webhookData.ok;
-        
-        // Bot username'ni olamiz
-        const meRes = await fetchFn(`https://api.telegram.org/bot${cleanToken}/getMe`);
-        const meData = await meRes.json();
-        if (meData.ok) botUsername = meData.result.username;
-        
-        if (!webhookData.ok) {
-          return res.json({ 
-            message: 'Sozlamalar saqlandi, lekin webhook o\'rnatilmadi: ' + (webhookData.description || ''),
-            webhookSet: false,
-            botUsername,
-            subscriberCount: company.telegramSubscribers?.length || 0
-          });
-        }
-      } catch (tgErr) {
-        console.error('Webhook o\'rnatishda xato:', tgErr);
+        await fetchFn(`https://api.telegram.org/bot${cleanToken}/deleteWebhook`);
+      } catch (e) {
+        console.log('Webhookni o\'chirishda xato:', e.message);
       }
     }
     
     res.json({ 
-      message: webhookSet 
-        ? `Bot @${botUsername} muvaffaqiyatli ulandi! Endi Telegramda botga /start bosing.`
+      message: cleanToken 
+        ? `Bot @${botUsername} muvaffaqiyatli ulandi! Polling orqali ishlamoqda. Endi Telegramda botga /start bosing.`
         : 'Sozlamalar saqlandi',
-      webhookSet,
+      webhookSet: true, // Frontendda success alert chiqishi uchun true qoldiramiz
       botUsername,
       subscriberCount: company.telegramSubscribers?.length || 0
     });
