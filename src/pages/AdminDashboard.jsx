@@ -250,26 +250,39 @@ export default function AdminDashboard() {
     }
     try {
       // Avval joriy ma'lumotlarni saqlaymiz
-      await fetch(`/api/company/${user.companyId}/telegram`, {
+      const saveRes = await fetch(`/api/company/${user.companyId}/telegram`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(telegramSettings)
       });
+      if (!saveRes.ok) {
+        const saveData = await saveRes.json();
+        alert('❌ Sozlamalarni saqlashda xato: ' + (saveData.message || 'Noma\'lum xato'));
+        return;
+      }
       // Keyin test yuboramiz
       const res = await fetch(`/api/cron/test-telegram`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ token: currentToken, chatId: currentChatId })
       });
       const data = await res.json();
       if (res.ok) {
-        alert('✅ Test xabar botingizga yuborildi!');
+        alert('✅ Test xabar botingizga yuborildi! Telegramni tekshiring.');
       } else {
-        alert('❌ ' + (data.message || 'Token yoki Chat ID noto\'g\'ri'));
+        let errorMsg = data.message || 'Noma\'lum xato';
+        if (errorMsg.includes('Unauthorized')) {
+          errorMsg = 'Bot tokeni noto\'g\'ri! BotFather dan tekshirib oling.';
+        } else if (errorMsg.includes('chat not found')) {
+          errorMsg = 'Chat ID topilmadi! Avval botga /start bosing yoki Chat ID ni tekshiring.';
+        } else if (errorMsg.includes('bot was blocked')) {
+          errorMsg = 'Bot bloklangan! Telegramda botga kirib /start bosing.';
+        }
+        alert('❌ ' + errorMsg);
       }
     } catch (err) {
-      console.error(err);
-      alert('Tarmoq xatosi.');
+      console.error('Telegram test xatosi:', err);
+      alert('❌ Tarmoq xatosi: Server bilan bog\'lanib bo\'lmadi. Internet ulanishini tekshiring.');
     }
   };
 

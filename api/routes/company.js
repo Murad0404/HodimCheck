@@ -5,6 +5,9 @@ const Company = require('../models/Company');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 
+// fetch fallback for older Node.js versions
+const fetchFn = typeof fetch !== 'undefined' ? fetch : (...args) => import('node-fetch').then(mod => mod.default(...args));
+
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization;
   if (!token) return res.status(401).json({ message: 'Ruxsat yo\'q' });
@@ -137,7 +140,7 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     if (cleanToken && cleanChatId) {
       try {
         const tgUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
-        await fetch(tgUrl, {
+        await fetchFn(tgUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -4,6 +4,9 @@ const Company = require('../models/Company');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 
+// fetch fallback for older Node.js versions
+const fetchFn = typeof fetch !== 'undefined' ? fetch : (...args) => import('node-fetch').then(mod => mod.default(...args));
+
 router.get('/send-reports', async (req, res) => {
   try {
     // Toshkent vaqti bilan hozirgi soatni olamiz
@@ -82,7 +85,7 @@ router.get('/send-reports', async (req, res) => {
       // Telegramga yuborish
       const telegramUrl = `https://api.telegram.org/bot${company.telegramBotToken}/sendMessage`;
       try {
-        const tgRes = await fetch(telegramUrl, {
+        const tgRes = await fetchFn(telegramUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -109,13 +112,23 @@ router.get('/send-reports', async (req, res) => {
 router.post('/test-telegram', async (req, res) => {
   try {
     const { token, chatId } = req.body;
-    if (!token || !chatId) return res.status(400).json({ message: 'Token yoki Chat ID yetishmayapti' });
+    console.log('Test telegram so\'rov keldi:', { token: token ? token.substring(0, 10) + '...' : 'YO\'Q', chatId });
+    
+    if (!token || !chatId) {
+      return res.status(400).json({ message: 'Token yoki Chat ID yetishmayapti' });
+    }
     
     const cleanToken = token.trim();
     const cleanChatId = chatId.trim();
     
+    if (!cleanToken || !cleanChatId) {
+      return res.status(400).json({ message: 'Token yoki Chat ID bo\'sh' });
+    }
+    
     const telegramUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
-    const tgRes = await fetch(telegramUrl, {
+    console.log('Telegram API ga so\'rov yuborilmoqda...');
+    
+    const tgRes = await fetchFn(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -126,13 +139,18 @@ router.post('/test-telegram', async (req, res) => {
     });
     
     const tgData = await tgRes.json();
+    console.log('Telegram javob:', JSON.stringify(tgData));
+    
     if (tgRes.ok) {
       res.json({ message: 'Test xabar yuborildi!' });
     } else {
-      res.status(400).json({ message: tgData.description || 'Telegram xatosi' });
+      const errorMsg = tgData.description || 'Telegram xatosi';
+      console.error('Telegram xatosi:', errorMsg);
+      res.status(400).json({ message: errorMsg, error_code: tgData.error_code });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Server xatosi', error: error.message });
+    console.error('Test telegram xatosi:', error);
+    res.status(500).json({ message: 'Server xatosi: ' + error.message });
   }
 });
 
