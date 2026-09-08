@@ -78,12 +78,15 @@ async function checkUpdates() {
 }
 
 async function handleMessage(message, company) {
-  const text = (message.text || '').toLowerCase();
+  const text = (message.text || '').trim().toLowerCase();
   const chatId = message.chat.id.toString();
+  const token = company.telegramBotToken;
 
   if (text.startsWith('/start')) {
     // Avval qo'shilganligini tekshiramiz
     const alreadyExists = company.telegramSubscribers.some(s => s.chatId === chatId);
+    let changed = false;
+
     if (!alreadyExists) {
       company.telegramSubscribers.push({
         chatId: chatId,
@@ -91,21 +94,103 @@ async function handleMessage(message, company) {
         username: message.chat.username || '',
         joinedAt: new Date()
       });
-      await company.save();
-      console.log(`[Bot] Yangi obunachi qo'shildi: ${message.chat.first_name || chatId}`);
+      changed = true;
     }
 
-    try {
-      await fetchFn(`https://api.telegram.org/bot${company.telegramBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `✅ <b>HodimCheck</b> tizimiga muvaffaqiyatli ulanding!\n\n🏢 Kompaniya: <b>${company.name}</b>\n\nEndi siz har kuni davomat hisobotlarini olasiz.`,
-          parse_mode: 'HTML'
-        })
-      });
-    } catch (err) {}
+    // Agar company.telegramChatId bo'sh bo'lsa, avtomatik to'ldirib qo'yamiz
+    if (!company.telegramChatId) {
+      company.telegramChatId = chatId;
+      changed = true;
+    }
+
+    if (changed) {
+      await company.save();
+    }
+
+    console.log(`[Bot] Yangi /start: ${message.chat.first_name || chatId} (Kompaniya: ${company.name})`);
+
+    const welcomeMsg = `👋 <b>Assalomu alaykum, ${message.chat.first_name || 'Admin'}!</b>\n\n` +
+      `🏢 Kompaniya: <b>${company.name}</b>\n` +
+      `🆔 Sizning Chat ID: <code>${chatId}</code>\n\n` +
+      `✅ Siz <b>HodimCheck</b> tizimi hisobotlariga muvaffaqiyatli ulandingiz!\n` +
+      `⏰ Belgilangan vaqtlarda (Keldi: ${company.reportTimeKeldi || '11:00'}, Ketdi: ${company.reportTimeKetdi || '19:00'}) avtomatik hisobotlar shu yerga keladi.\n\n` +
+      `📌 <b>Mavjud buyruqlar:</b>\n` +
+      `• /stats yoki /hisobot — Bugungi hozirgi davomatni ko'rish\n` +
+      `• /id — O'z Telegram Chat ID ingizni bilish`;
+
+    await sendMessage(token, chatId, welcomeMsg);
+  } else if (text === '/id' || text === 'id') {
+    await sendMessage(token, chatId, `🆔 Sizning Telegram Chat ID: <code>${chatId}</code>\n\nUshbu ID ni saytdagi Admin panelda "Telegram Chat ID" maydoniga kiritishingiz mumkin.`);
+  } else if (text === '/stats' || text === '/hisobot' || text === 'hisobot' || text === 'statistika') {
+    console.log(`[Bot] ${company.name} uchun tezkor hisobot so'raldi (/stats)...`);
+    await sendInstantReport(token, chatId, company);
+  } else {
+    await sendMessage(token, chatId, `❓ Noma'lum buyruq.\n\nDavomat hisobotini ko'rish uchun /stats yoki /hisobot deb yozing.`);
+  }
+}
+
+// Tezkor hisobot (/stats) yuborish
+async function sendInstantReport(token, chatId, company) {
+  try {
+    const tzDate = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Tashkent"}));
+    const startOfDay = new Date(tzDate); startOfDay.setHours(0,0,0,0);
+    const endOfDay = new Date(tzDate); endOfDay.setHours(23,59,59,999);
+
+    const attendances = await Attendance.find({ 
+      companyId: company._id, 
+      timestamp: { $gte: startOfDay, $lte: endOfDay } 
+    }).populate('userId');
+    
+    const allUsers = await User.find({ companyId: company._id, role: 'employee' });
+
+    let message = `📊 <b>${company.name} - Bugungi Davomat Hisoboti</b>\n`;
+    message += `📅 Sana: ${tzDate.toLocaleDateString('uz-UZ')}\n`;
+    message += `⏰ Vaqt: ${tzDate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}\n\n`;
+
+    const presentKeldi = [];
+    const presentUserIds = new Set();
+
+    for (const log of attendances) {
+      if (!log.userId) continue;
+      const uId = log.userId._id.toString();
+      if (log.type === 'keldi' && !presentUserIds.has(uId)) {
+        presentUserIds.add(uId);
+        const time = new Date(log.timestamp).toLocaleTimeString('uz-UZ', { timeZone: 'Asia/Tashkent', hour: '2-digit', minute:'2-digit' });
+        presentKeldi.push(`✅ ${log.userId.fullName} — ${time}`);
+      }
+    }
+
+    message += `<b>Kelganlar (${presentKeldi.length}):</b>\n`;
+    if (presentKeldi.length > 0) {
+      message += presentKeldi.join('\n') + '\n\n';
+    } else {
+      message += `<i>Hali hech kim kelmadi</i>\n\n`;
+    }
+
+    const absentees = allUsers.filter(u => !presentUserIds.has(u._id.toString()));
+    message += `<b>Kelmadi / Kutilmoqda (${absentees.length}):</b>\n`;
+    if (absentees.length > 0) {
+      message += absentees.map(u => `❌ ${u.fullName}`).join('\n') + '\n\n';
+    } else {
+      message += `<i>Barcha xodimlar kelgan! 👏</i>\n\n`;
+    }
+
+    await sendMessage(token, chatId, message);
+  } catch (err) {
+    console.error('Stats yuborishda xato:', err);
+    await sendMessage(token, chatId, `❌ Hisobotni yuklashda xatolik yuz berdi: ${err.message}`);
+  }
+}
+
+async function sendMessage(token, chatId, htmlText) {
+  try {
+    await fetchFn(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: htmlText, parse_mode: 'HTML' })
+    });
+  } catch (err) {
+    console.error(`[Xabar yuborish xatosi - Chat: ${chatId}]:`, err.message);
   }
 }
 
@@ -113,7 +198,7 @@ async function handleMessage(message, company) {
 // 2. AVTOMATIK HISOBOT QISMI (Cron)
 // ==========================================
 async function startCron() {
-  console.log("🚀 Avtomatik hisobot tizimi ishga tushdi...");
+  console.log("🚀 Avtomatik hisobot tizimi (Cron) ishga tushdi...");
   checkCron();
 }
 
@@ -125,16 +210,27 @@ async function checkCron() {
     const currentTime = `${currentHour}:${currentMinute}`;
     const todayStr = tzDate.toLocaleDateString('en-US');
 
-    // Faqat tokeni va obunachisi bor kompaniyalarni olish
+    // Faqat tokeni bor kompaniyalarni olish
     const companies = await Company.find({ 
-      telegramBotToken: { $ne: '' }, 
-      'telegramSubscribers.0': { $exists: true } 
+      telegramBotToken: { $ne: '' }
     });
     
     const startOfDay = new Date(tzDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(tzDate); endOfDay.setHours(23,59,59,999);
 
     for (const company of companies) {
+      // Qabul qiluvchi Chat ID larni yig'amiz
+      const targetChatIds = new Set();
+      if (company.telegramChatId) {
+        company.telegramChatId.toString().split(/[,;\s]+/).filter(Boolean).forEach(id => targetChatIds.add(id.trim()));
+      }
+      if (company.telegramSubscribers && company.telegramSubscribers.length > 0) {
+        company.telegramSubscribers.forEach(sub => {
+          if (sub.chatId) targetChatIds.add(sub.chatId.trim());
+        });
+      }
+      if (targetChatIds.size === 0) continue;
+
       // Vaqt to'g'ri kelishini tekshirish (Admin paneldan belgilangan vaqt)
       const isKeldiTime = company.reportTimeKeldi === currentTime;
       const isKetdiTime = company.reportTimeKetdi === currentTime;
@@ -148,7 +244,7 @@ async function checkCron() {
       if (lastSentReports[reportKey]) continue;
       lastSentReports[reportKey] = true;
 
-      console.log(`[Cron] ${company.name} uchun ${typeStr} hisoboti yuborilmoqda...`);
+      console.log(`[Cron ${currentTime}] ${company.name} uchun ${typeStr} hisoboti yuborilmoqda (${targetChatIds.size} ta manzilga)...`);
 
       const attendances = await Attendance.find({ 
         companyId: company._id, 
@@ -185,21 +281,19 @@ async function checkCron() {
         if (absentees.length > 0) {
           message += absentees.map(u => `❌ ${u.fullName}`).join('\n');
         } else {
-          message += `<i>Hamma kelgan</i>`;
+          message += `<i>Hamma kelgan 👏</i>`;
         }
       }
 
-      // Xabarni barcha obunachilarga jo'natish
-      for (const sub of company.telegramSubscribers) {
-        await fetchFn(`https://api.telegram.org/bot${company.telegramBotToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: sub.chatId, text: message, parse_mode: 'HTML' })
-        });
+      // Xabarni barcha manzillarga jo'natish
+      for (const tChatId of targetChatIds) {
+        await sendMessage(company.telegramBotToken, tChatId, message);
       }
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error('Cron xatosi:', err);
+  }
 
-  // Har 60 soniyada tekshiradi
-  setTimeout(checkCron, 60000); 
+  // Har 30 soniyada tekshiradi
+  setTimeout(checkCron, 30000); 
 }

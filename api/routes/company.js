@@ -119,7 +119,7 @@ router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) =>
 // Telegram sozlamalarini saqlash
 router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { telegramBotToken, reportTimeKeldi, reportTimeKetdi } = req.body;
+    const { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi } = req.body;
     let cleanToken = (telegramBotToken || '').trim();
     
     // Agar foydalanuvchi butun boshli "@botname: token" ni tashlab qo'ysa, tokenni ajratib olamiz
@@ -127,6 +127,8 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     if (tokenMatch) {
       cleanToken = tokenMatch[1];
     }
+
+    const cleanChatId = (telegramChatId || '').toString().trim();
     
     // Avval tokenni Telegram API bilan tekshiramiz
     let botUsername = '';
@@ -136,18 +138,15 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
         const checkData = await checkRes.json();
         if (!checkData.ok) {
           return res.status(400).json({ 
-            message: 'Bot tokeni noto\'g\'ri! Faqatgina tokenni kiriting (Masalan: 123456:ABC-DEF...).',
-            webhookSet: false,
-            subscriberCount: 0
+            message: 'Bot tokeni noto\'g\'ri! BotFather bergan tokenni to\'g\'ri kiriting (Masalan: 123456:ABC-DEF...).',
+            botUsername: ''
           });
         }
         botUsername = checkData.result.username;
         console.log('Bot tekshirildi:', botUsername);
       } catch (checkErr) {
         return res.status(400).json({ 
-          message: 'Telegram bilan bog\'lanib bo\'lmadi. Internetni yoki tokenni tekshiring.',
-          webhookSet: false,
-          subscriberCount: 0
+          message: 'Telegram bilan bog\'lanib bo\'lmadi. Internetni yoki tokenni tekshiring.'
         });
       }
     }
@@ -156,19 +155,20 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
       req.params.id, 
       { 
         telegramBotToken: cleanToken, 
-        reportTimeKeldi, 
-        reportTimeKetdi 
+        telegramChatId: cleanChatId,
+        reportTimeKeldi: reportTimeKeldi || '11:00', 
+        reportTimeKetdi: reportTimeKetdi || '19:00' 
       }, 
       { new: true }
     );
     
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
     
-    // Webhook o'rniga Polling ishlaydi. 
-    // Shuning uchun webhookni o'chirish kerak bo'lsa o'chirib yuboramiz.
+    // Webhook o'rniga Long Polling ishlaydi. 
+    // Shuning uchun Telegram webhookni o'chiramiz, bot bemalol polling bilan ishlashi uchun.
     if (cleanToken) {
       try {
-        await fetchFn(`https://api.telegram.org/bot${cleanToken}/deleteWebhook`);
+        await fetchFn(`https://api.telegram.org/bot${cleanToken}/deleteWebhook?drop_pending_updates=true`);
       } catch (e) {
         console.log('Webhookni o\'chirishda xato:', e.message);
       }
@@ -176,10 +176,10 @@ router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) =>
     
     res.json({ 
       message: cleanToken 
-        ? `Bot @${botUsername} muvaffaqiyatli ulandi! Polling orqali ishlamoqda. Endi Telegramda botga /start bosing.`
+        ? `Bot @${botUsername} muvaffaqiyatli saqlandi! Polling orqali faol.`
         : 'Sozlamalar saqlandi',
-      webhookSet: true, // Frontendda success alert chiqishi uchun true qoldiramiz
       botUsername,
+      telegramChatId: company.telegramChatId,
       subscriberCount: company.telegramSubscribers?.length || 0
     });
   } catch (error) {

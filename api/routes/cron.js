@@ -7,26 +7,29 @@ const Attendance = require('../models/Attendance');
 // fetch fallback for older Node.js versions
 const fetchFn = typeof fetch !== 'undefined' ? fetch : (...args) => import('node-fetch').then(mod => mod.default(...args));
 
-// Barcha subscriberlarga xabar yuborish funksiyasi
-async function broadcastMessage(botToken, subscribers, message) {
+// Barcha manzillarga xabar yuborish funksiyasi
+async function broadcastMessage(botToken, targets, message) {
   const results = [];
   const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
   
-  for (const sub of subscribers) {
+  for (const target of targets) {
+    const chatId = typeof target === 'object' ? target.chatId : target;
+    const name = typeof target === 'object' ? (target.firstName || '') : '';
+    if (!chatId) continue;
     try {
       const tgRes = await fetchFn(telegramUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: sub.chatId,
+          chat_id: chatId,
           text: message,
           parse_mode: 'HTML'
         })
       });
       const tgData = await tgRes.json();
-      results.push({ chatId: sub.chatId, name: sub.firstName, success: tgRes.ok, error: tgData.description });
+      results.push({ chatId, name, success: tgRes.ok, error: tgData.description });
     } catch (err) {
-      results.push({ chatId: sub.chatId, name: sub.firstName, success: false, error: err.message });
+      results.push({ chatId, name, success: false, error: err.message });
     }
   }
   return results;
@@ -45,8 +48,7 @@ router.get('/send-reports', async (req, res) => {
         { reportTimeKeldi: { $regex: `^${timePrefix}` } },
         { reportTimeKetdi: { $regex: `^${timePrefix}` } }
       ],
-      telegramBotToken: { $ne: '' },
-      'telegramSubscribers.0': { $exists: true } // Kamida 1 ta subscriber bo'lishi kerak
+      telegramBotToken: { $ne: '' }
     });
 
     const results = [];
@@ -58,6 +60,18 @@ router.get('/send-reports', async (req, res) => {
     endOfDay.setHours(23,59,59,999);
 
     for (const company of companies) {
+      // Qabul qiluvchi Chat ID larni yig'amiz
+      const targetChatIds = new Set();
+      if (company.telegramChatId) {
+        company.telegramChatId.toString().split(/[,;\s]+/).filter(Boolean).forEach(id => targetChatIds.add(id.trim()));
+      }
+      if (company.telegramSubscribers && company.telegramSubscribers.length > 0) {
+        company.telegramSubscribers.forEach(sub => {
+          if (sub.chatId) targetChatIds.add(sub.chatId.trim());
+        });
+      }
+      if (targetChatIds.size === 0) continue;
+
       const isKeldiTime = company.reportTimeKeldi.startsWith(timePrefix);
       const isKetdiTime = company.reportTimeKetdi.startsWith(timePrefix);
       
@@ -107,11 +121,11 @@ router.get('/send-reports', async (req, res) => {
         }
       }
 
-      // Barcha subscriberlarga broadcast qilish
-      const broadcastResults = await broadcastMessage(company.telegramBotToken, company.telegramSubscribers, message);
+      // Barcha belgilangan chatlarga jo'natish
+      const broadcastResults = await broadcastMessage(company.telegramBotToken, Array.from(targetChatIds), message);
       results.push({ 
         company: company.name, 
-        subscriberCount: company.telegramSubscribers.length,
+        recipientsCount: targetChatIds.size,
         sent: broadcastResults.filter(r => r.success).length,
         failed: broadcastResults.filter(r => !r.success).length,
         details: broadcastResults
@@ -125,50 +139,69 @@ router.get('/send-reports', async (req, res) => {
   }
 });
 
-// Admin panelida test xabar yuborish uchun (barcha subscriberlarga)
+// Admin panelida test xabar yuborish uchun
 router.post('/test-telegram', async (req, res) => {
   try {
-    const { token, companyId } = req.body;
-    console.log('Test telegram so\'rov keldi:', { token: token ? token.substring(0, 10) + '...' : 'YO\'Q', companyId });
+    const { token, companyId, chatId } = req.body;
+    console.log('Test telegram so\'rov keldi:', { token: token ? token.substring(0, 10) + '...' : 'YO\'Q', companyId, chatId });
     
-    if (!token || !companyId) {
+    if (!token && !companyId) {
       return res.status(400).json({ message: 'Token yoki kompaniya ID yetishmayapti' });
     }
     
-    let cleanToken = token.trim();
-    // Agar foydalanuvchi butun boshli "@botname: token" ni tashlab qo'ysa, tokenni ajratib olamiz
+    let cleanToken = (token || '').trim();
     const tokenMatch = cleanToken.match(/(\d+:[a-zA-Z0-9_-]+)/);
     if (tokenMatch) {
       cleanToken = tokenMatch[1];
     }
-    
-    // Kompaniyaning subscriberlarini olamiz
-    const company = await Company.findById(companyId);
-    if (!company) {
-      return res.status(404).json({ message: 'Kompaniya topilmadi' });
+
+    const company = companyId ? await Company.findById(companyId) : null;
+    if (!cleanToken && company) {
+      cleanToken = company.telegramBotToken;
+    }
+
+    if (!cleanToken) {
+      return res.status(400).json({ message: 'Bot tokeni topilmadi. Avval Bot tokenini kiriting.' });
     }
     
-    if (!company.telegramSubscribers || company.telegramSubscribers.length === 0) {
+    const targetChatIds = new Set();
+    if (chatId) {
+      chatId.toString().split(/[,;\s]+/).filter(Boolean).forEach(id => targetChatIds.add(id.trim()));
+    }
+    if (company && company.telegramChatId) {
+      company.telegramChatId.toString().split(/[,;\s]+/).filter(Boolean).forEach(id => targetChatIds.add(id.trim()));
+    }
+    if (company && company.telegramSubscribers && company.telegramSubscribers.length > 0) {
+      company.telegramSubscribers.forEach(sub => {
+        if (sub.chatId) targetChatIds.add(sub.chatId.trim());
+      });
+    }
+
+    if (targetChatIds.size === 0) {
       return res.status(400).json({ 
-        message: 'Hali hech kim botga /start bosmagan. Avval Telegramda botni oching va /start bosing!' 
+        message: 'Telegram Chat ID topilmadi! Iltimos, "Chat ID" maydoniga o\'z Telegram ID ingizni kiriting yoki botga /start bosing.' 
       });
     }
     
-    const message = `✅ <b>HodimCheck</b> tizimidan test xabar!\n\n🏢 Kompaniya: <b>${company.name}</b>\n👥 Obunachi: <b>${company.telegramSubscribers.length}</b> ta\n\nBotingiz muvaffaqiyatli ishlayapti!`;
+    const companyName = company ? company.name : 'HodimCheck';
+    const message = `✅ <b>HodimCheck</b> tizimidan test xabar!\n\n🏢 Kompaniya: <b>${companyName}</b>\n🤖 Bot holati: <b>Faol (Long Polling)</b>\n⏰ Vaqt: ${new Date().toLocaleTimeString('uz-UZ', { timeZone: 'Asia/Tashkent' })}\n\nTelegram sozlamalaringiz muvaffaqiyatli ishlamoqda!`;
     
-    const broadcastResults = await broadcastMessage(cleanToken, company.telegramSubscribers, message);
+    const broadcastResults = await broadcastMessage(cleanToken, Array.from(targetChatIds), message);
     
     const successCount = broadcastResults.filter(r => r.success).length;
     const failCount = broadcastResults.filter(r => !r.success).length;
     
     if (successCount > 0) {
       res.json({ 
-        message: `✅ ${successCount} ta obunachiga test xabar yuborildi!${failCount > 0 ? ` (${failCount} ta muvaffaqiyatsiz)` : ''}`,
+        message: `✅ Test xabar muvaffaqiyatli yuborildi (${successCount} ta manzilga)!`,
         results: broadcastResults
       });
     } else {
       const firstError = broadcastResults[0]?.error || 'Noma\'lum xato';
-      res.status(400).json({ message: 'Xabar yuborilmadi: ' + firstError, results: broadcastResults });
+      res.status(400).json({ 
+        message: `❌ Telegramga yuborilmadi: ${firstError}. (Eslatma: Telegramda botingizga kirib kamida bir marta /start bosganingizga ishonch hosil qiling)`, 
+        results: broadcastResults 
+      });
     }
   } catch (error) {
     console.error('Test telegram xatosi:', error);
