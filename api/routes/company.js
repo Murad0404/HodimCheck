@@ -175,6 +175,29 @@ router.post('/:id/users/:userId/dayoff', authMiddleware, adminMiddleware, async 
   }
 });
 
+// Xodimga rasm orqali yuz ma'lumotini saqlash (Admin tomonidan)
+router.post('/:id/users/:userId/face', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { descriptor } = req.body;
+    
+    if (!descriptor || !Array.isArray(descriptor)) {
+      return res.status(400).json({ message: 'Yuz ma\'lumotlari xato' });
+    }
+
+    const user = await User.findOne({ _id: req.params.userId, companyId: req.params.id });
+    
+    if (!user) return res.status(404).json({ message: 'Xodim topilmadi' });
+
+    user.faceDescriptor = descriptor;
+    await user.save();
+
+    res.json({ message: 'Xodimning yuz tasdig\'i muvaffaqiyatli saqlandi' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server xatosi' });
+  }
+});
+
 // Kompaniyaning barcha davomat tarixini olish
 router.get('/:id/attendance', authMiddleware, adminMiddleware, async (req, res) => {
   try {

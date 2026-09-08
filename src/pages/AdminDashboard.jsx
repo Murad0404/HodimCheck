@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { LogOut, Settings, Users, CalendarDays, PlusCircle, CheckCircle, XCircle } from 'lucide-react';
+import { LogOut, Settings, Users, CalendarDays, PlusCircle, CheckCircle, XCircle, Camera } from 'lucide-react';
+import AdminFaceUploader from '../components/AdminFaceUploader';
 
 export default function AdminDashboard() {
   const [company, setCompany] = useState(null);
@@ -16,6 +17,7 @@ export default function AdminDashboard() {
   // Forms
   const [newUser, setNewUser] = useState({ fullName: '', position: 'Dasturchi', totalDayOffs: 24 });
   const [dayOffForm, setDayOffForm] = useState({ userId: null, date: '', reason: '' });
+  const [faceUploadUserId, setFaceUploadUserId] = useState(null);
 
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -39,9 +41,15 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      setUsers(data);
+      if (res.ok && Array.isArray(data)) {
+        setUsers(data);
+      } else {
+        console.error('Failed to fetch users:', data);
+        setUsers([]);
+      }
     } catch (err) {
       console.error(err);
+      setUsers([]);
     }
   };
 
@@ -51,9 +59,15 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      setAttendance(data);
+      if (res.ok && Array.isArray(data)) {
+        setAttendance(data);
+      } else {
+        console.error('Failed to fetch attendance:', data);
+        setAttendance([]);
+      }
     } catch (err) {
       console.error(err);
+      setAttendance([]);
     }
   };
 
@@ -63,9 +77,15 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      setLeaveRequests(data);
+      if (res.ok && Array.isArray(data)) {
+        setLeaveRequests(data);
+      } else {
+        console.error('Failed to fetch leave requests:', data);
+        setLeaveRequests([]);
+      }
     } catch (err) {
       console.error(err);
+      setLeaveRequests([]);
     }
   };
 
@@ -185,7 +205,7 @@ export default function AdminDashboard() {
   if (loading || !company) return <div className="text-center mt-5">Yuklanmoqda...</div>;
 
   return (
-    <div className="admin-container">
+    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
       <div className="glass-panel" style={{ marginBottom: '1rem' }}>
         <div className="admin-header">
           <div>
@@ -301,13 +321,22 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td style={{ padding: '12px' }}>
-                        <button 
-                          className="btn btn-primary" 
-                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                          onClick={() => setDayOffForm({ ...dayOffForm, userId: u._id })}
-                        >
-                          Dam olish berish
-                        </button>
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', width: 'auto' }}
+                            onClick={() => setDayOffForm({ ...dayOffForm, userId: u._id })}
+                          >
+                            Dam olish
+                          </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', width: 'auto' }}
+                            onClick={() => setFaceUploadUserId(u._id)}
+                          >
+                            <Camera size={14} style={{ marginRight: '4px' }}/> Yuz yuklash
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -341,6 +370,19 @@ export default function AdminDashboard() {
                 </form>
               </div>
             </div>
+          )}
+
+          {/* Yuz yuklash modali */}
+          {faceUploadUserId && (
+            <AdminFaceUploader 
+              userId={faceUploadUserId} 
+              companyId={company._id} 
+              onComplete={() => {
+                setFaceUploadUserId(null);
+                fetchUsers();
+              }}
+              onCancel={() => setFaceUploadUserId(null)}
+            />
           )}
         </div>
       )}
