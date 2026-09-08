@@ -111,12 +111,15 @@ router.post('/test-telegram', async (req, res) => {
     const { token, chatId } = req.body;
     if (!token || !chatId) return res.status(400).json({ message: 'Token yoki Chat ID yetishmayapti' });
     
-    const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+    const cleanToken = token.trim();
+    const cleanChatId = chatId.trim();
+    
+    const telegramUrl = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
     const tgRes = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: cleanChatId,
         text: '✅ <b>HodimCheck</b> tizimidan test xabar!\nSizning botingiz muvaffaqiyatli ulandi.',
         parse_mode: 'HTML'
       })
