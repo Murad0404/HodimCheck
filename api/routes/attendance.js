@@ -36,16 +36,32 @@ router.post('/mark', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Yuzni tasdiqlash majburiy' });
     }
 
+    // Bugungi kungi yozuvlar sonini hisoblash
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const countToday = await Attendance.countDocuments({
+      userId,
+      companyId,
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    // Agar 0, 2, 4 bo'lsa (juft) -> 'keldi'
+    // Agar 1, 3, 5 bo'lsa (toq) -> 'ketdi'
+    const determinedType = (countToday % 2 === 0) ? 'keldi' : 'ketdi';
+
     const attendance = new Attendance({
       userId,
       companyId,
-      type,
+      type: determinedType,
       faceVerified: !!faceVerified
     });
 
     await attendance.save();
 
-    res.status(201).json({ message: `Muvaffaqiyatli ${type === 'keldi' ? 'keldingiz' : 'ketdingiz'}` });
+    res.status(201).json({ message: `Muvaffaqiyatli ${determinedType === 'keldi' ? 'keldingiz' : 'ketdingiz'}`, type: determinedType });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });

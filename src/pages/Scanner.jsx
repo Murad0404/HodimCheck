@@ -117,7 +117,7 @@ export default function Scanner() {
               if (companyData.faceIdEnabled) {
                 setFaceCheckRequired('verify');
               } else {
-                markAttendance(decodedText, 'keldi', false);
+                markAttendance(decodedText, null, false);
               }
             }).catch(e => console.error(e));
           }
@@ -224,11 +224,7 @@ export default function Scanner() {
             <FaceScanner mode="verify" onComplete={(success) => {
               if(success) {
                 setStatus('Yuz tasdiqlandi. Kuting...');
-                if(window.confirm('Keldingizmi? (Cancel = Ketdim)')) {
-                  markAttendance(scanResult, 'keldi', true);
-                } else {
-                  markAttendance(scanResult, 'ketdi', true);
-                }
+                markAttendance(scanResult, null, true);
               } else {
                 setStatus('❌ Yuz tasdiqlanmadi');
               }
