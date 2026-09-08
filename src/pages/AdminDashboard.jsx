@@ -233,21 +233,35 @@ export default function AdminDashboard() {
   };
 
   const handleTestTelegram = async () => {
+    const currentToken = telegramSettings.telegramBotToken.trim();
+    const currentChatId = telegramSettings.telegramChatId.trim();
+
+    if (!currentToken || !currentChatId) {
+      alert('Iltimos avval Bot Tokeni va Chat ID ni kiriting!');
+      return;
+    }
     try {
+      // Avval joriy ma'lumotlarni saqlaymiz
+      await fetch(`/api/company/${user.companyId}/telegram`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(telegramSettings)
+      });
+      // Keyin test yuboramiz
       const res = await fetch(`/api/cron/test-telegram`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: telegramSettings.telegramBotToken, chatId: telegramSettings.telegramChatId })
+        body: JSON.stringify({ token: currentToken, chatId: currentChatId })
       });
       const data = await res.json();
       if (res.ok) {
-        alert('Test xabar yuborildi!');
+        alert('✅ Test xabar botingizga yuborildi!');
       } else {
-        alert(data.message);
+        alert('❌ ' + (data.message || 'Token yoki Chat ID noto\'g\'ri'));
       }
     } catch (err) {
       console.error(err);
-      alert('Xatolik yuz berdi');
+      alert('Tarmoq xatosi.');
     }
   };
 
