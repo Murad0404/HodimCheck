@@ -113,6 +113,25 @@ router.put('/:id/location', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
+// Telegram sozlamalarini saqlash
+router.put('/:id/telegram', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi } = req.body;
+    const company = await Company.findByIdAndUpdate(
+      req.params.id, 
+      { telegramBotToken, telegramChatId, reportTimeKeldi, reportTimeKetdi }, 
+      { new: true }
+    );
+    
+    if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
+    
+    res.json({ message: 'Telegram sozlamalari saqlandi' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server xatosi' });
+  }
+});
+
 // Xodimlarni ro'yxatini olish
 router.get('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {

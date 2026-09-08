@@ -18,6 +18,13 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({ fullName: '', position: 'Dasturchi', totalDayOffs: 24 });
   const [dayOffForm, setDayOffForm] = useState({ userId: null, date: '', reason: '' });
   const [faceUploadUserId, setFaceUploadUserId] = useState(null);
+  
+  const [telegramSettings, setTelegramSettings] = useState({
+    telegramBotToken: '',
+    telegramChatId: '',
+    reportTimeKeldi: '11:00',
+    reportTimeKetdi: '19:00'
+  });
 
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -30,6 +37,12 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       setCompany(data);
+      setTelegramSettings({
+        telegramBotToken: data.telegramBotToken || '',
+        telegramChatId: data.telegramChatId || '',
+        reportTimeKeldi: data.reportTimeKeldi || '11:00',
+        reportTimeKetdi: data.reportTimeKetdi || '19:00'
+      });
     } catch (err) {
       console.error(err);
     }
@@ -202,6 +215,41 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSaveTelegram = async () => {
+    try {
+      const res = await fetch(`/api/company/${user.companyId}/telegram`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(telegramSettings)
+      });
+      if (res.ok) {
+        alert('Telegram sozlamalari saqlandi');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Xatolik yuz berdi');
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    try {
+      const res = await fetch(`/api/cron/test-telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: telegramSettings.telegramBotToken, chatId: telegramSettings.telegramChatId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('Test xabar yuborildi!');
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Xatolik yuz berdi');
+    }
+  };
+
   if (loading || !company) return <div className="text-center mt-5">Yuklanmoqda...</div>;
 
   return (
@@ -270,6 +318,36 @@ export default function AdminDashboard() {
                 />
                 Face ID yordamida tasdiqlashni majburiy qilish
               </label>
+            </div>
+
+            <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+              <h4>Telegram Bot Sozlamalari</h4>
+              <p style={{ fontSize: '0.9rem' }}>Bot orqali avtomatik hisobotlar qabul qilish (masalan, 11:00 da kelganlar, 19:00 da ketganlar)</p>
+              
+              <div className="form-group" style={{ textAlign: 'left', marginTop: '1rem' }}>
+                <label>Bot Tokeni (BotFather dan)</label>
+                <input type="text" className="form-input" value={telegramSettings.telegramBotToken} onChange={e => setTelegramSettings({...telegramSettings, telegramBotToken: e.target.value})} placeholder="123456:ABC-DEF..." />
+              </div>
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label>Chat ID (Kanal yoki Guruh yoki ID)</label>
+                <input type="text" className="form-input" value={telegramSettings.telegramChatId} onChange={e => setTelegramSettings({...telegramSettings, telegramChatId: e.target.value})} placeholder="-100123456789" />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="form-group" style={{ textAlign: 'left' }}>
+                  <label>"Keldi" Vaqti</label>
+                  <input type="time" className="form-input" value={telegramSettings.reportTimeKeldi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKeldi: e.target.value})} />
+                </div>
+                <div className="form-group" style={{ textAlign: 'left' }}>
+                  <label>"Ketdi" Vaqti</label>
+                  <input type="time" className="form-input" value={telegramSettings.reportTimeKetdi} onChange={e => setTelegramSettings({...telegramSettings, reportTimeKetdi: e.target.value})} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button className="btn btn-primary" onClick={handleSaveTelegram} style={{ flex: 1, padding: '0.8rem' }}>Saqlash</button>
+                <button className="btn btn-outline" onClick={handleTestTelegram} style={{ flex: 1, padding: '0.8rem' }}>Test Xabar</button>
+              </div>
             </div>
           </div>
         </div>
