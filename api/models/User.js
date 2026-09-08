@@ -6,7 +6,8 @@ const UserSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   position: { type: String, required: true },
   role: { type: String, enum: ['admin', 'employee'], default: 'employee' },
-  password: { type: String, required: true },
+  password: { type: String, required: false }, // required: false because it will be set later
+  isFirstLogin: { type: Boolean, default: true },
   faceDescriptor: { type: [Number], default: [] }, // Array of numbers for face vector
   
   // Ta'til/Day Offs uchun yangi maydonlar

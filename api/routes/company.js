@@ -48,7 +48,8 @@ router.post('/', async (req, res) => {
       fullName: 'Admin',
       position: 'Admin',
       role: 'admin',
-      password: hashedPassword
+      password: hashedPassword,
+      isFirstLogin: false
     });
     
     await adminUser.save();
@@ -113,8 +114,6 @@ router.post('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
 
     const employeeId = 'EMP-' + Math.floor(1000 + Math.random() * 9000).toString();
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('123456', salt);
 
     const newUser = new User({
       employeeId,
@@ -122,7 +121,7 @@ router.post('/:id/users', authMiddleware, adminMiddleware, async (req, res) => {
       fullName,
       position,
       role: 'employee',
-      password: hashedPassword,
+      isFirstLogin: true,
       totalDayOffs: totalDayOffs || 24,
       usedDayOffs: 0
     });

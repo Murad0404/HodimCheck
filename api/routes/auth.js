@@ -43,6 +43,59 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Tizimga kirishdan oldin ID ni tekshirish
+router.post('/check-user', async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+    const user = await User.findOne({ employeeId });
+    if (!user) {
+      return res.status(404).json({ message: 'Xodim topilmadi' });
+    }
+    res.json({ isFirstLogin: user.isFirstLogin });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server xatosi' });
+  }
+});
+
+// Parol o'rnatish (birinchi marta kirishda)
+router.post('/set-password', async (req, res) => {
+  try {
+    const { employeeId, password } = req.body;
+    const user = await User.findOne({ employeeId });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Xodim topilmadi' });
+    }
+    if (!user.isFirstLogin) {
+      return res.status(400).json({ message: 'Siz oldin parol o\'rnatgansiz' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    user.password = hashedPassword;
+    user.isFirstLogin = false;
+    await user.save();
+
+    const token = jwt.sign({ id: user._id, role: user.role, companyId: user.companyId }, JWT_SECRET, { expiresIn: '1d' });
+    
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        role: user.role,
+        companyId: user.companyId,
+        faceDescriptor: user.faceDescriptor && user.faceDescriptor.length > 0
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server xatosi' });
+  }
+});
+
 // Login
 router.post('/login', async (req, res) => {
   try {
@@ -51,6 +104,10 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ employeeId });
     if (!user) {
       return res.status(400).json({ message: 'Xodim topilmadi yoki parol noto\'g\'ri' });
+    }
+
+    if (user.isFirstLogin) {
+      return res.status(400).json({ message: 'Iltimos, avval parol o\'rnating', requirePasswordSetup: true });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
