@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   // Data states
   const [users, setUsers] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
   
   // Forms
   const [newUser, setNewUser] = useState({ fullName: '', position: 'Dasturchi', totalDayOffs: 24 });
@@ -56,6 +57,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchLeaveRequests = async () => {
+    try {
+      const res = await fetch(`/api/leave/company`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setLeaveRequests(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchCompanyData().then(() => setLoading(false));
   }, []);
@@ -63,6 +76,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'attendance') fetchAttendance();
+    if (activeTab === 'requests') fetchLeaveRequests();
   }, [activeTab]);
 
   const handleLogout = () => {
@@ -111,6 +125,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleRequestStatus = async (id, status) => {
+    try {
+      const res = await fetch(`/api/leave/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        fetchLeaveRequests();
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleFaceId = async (enabled) => {
     try {
       await fetch(`/api/company/${user.companyId}/faceid`, {
@@ -149,6 +179,9 @@ export default function AdminDashboard() {
         </button>
         <button className={`btn ${activeTab === 'attendance' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('attendance')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
           <CalendarDays size={20} /> Davomat Tarixi
+        </button>
+        <button className={`btn ${activeTab === 'requests' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('requests')} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '8px', minWidth: '150px' }}>
+          <CalendarDays size={20} /> So'rovlar
         </button>
       </div>
 
@@ -300,6 +333,38 @@ export default function AdminDashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'requests' && (
+        <div className="glass-panel" style={{ padding: '2rem' }}>
+          <h3>Dam Olish So'rovlari</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+            {leaveRequests.map(req => (
+              <div key={req._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'var(--primary)' }}>{req.userId?.fullName} <span style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>({req.userId?.position})</span></h4>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '0.9rem' }}><strong>Sana:</strong> {new Date(req.date).toLocaleDateString('uz-UZ')}</p>
+                  {req.reason && <p style={{ margin: 0, fontSize: '0.9rem' }}><strong>Sabab:</strong> {req.reason}</p>}
+                </div>
+                <div>
+                  {req.status === 'pending' ? (
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn btn-success" style={{ padding: '8px 15px', width: 'auto' }} onClick={() => handleRequestStatus(req._id, 'approved')}>Ruxsat</button>
+                      <button className="btn btn-danger" style={{ padding: '8px 15px', width: 'auto' }} onClick={() => handleRequestStatus(req._id, 'rejected')}>Rad etish</button>
+                    </div>
+                  ) : (
+                    <span className={`status-badge status-${req.status}`}>
+                      {req.status === 'approved' ? 'Tasdiqlangan' : 'Rad etilgan'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {leaveRequests.length === 0 && (
+              <p className="text-center" style={{ padding: '2rem', color: 'var(--text-secondary)' }}>Hozircha so'rovlar yo'q</p>
+            )}
           </div>
         </div>
       )}

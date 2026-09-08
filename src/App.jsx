@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import Scanner from './pages/Scanner';
+import logo from './assets/logo.png';
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -26,6 +27,7 @@ function App() {
   return (
     <Router>
       <div className="container">
+        <img src={logo} alt="HodimCheck Logo" className="header-logo" />
         <Routes>
           <Route path="/" element={<RootRoute />} />
           <Route path="/login" element={<Login />} />
