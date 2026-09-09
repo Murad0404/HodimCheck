@@ -1,8 +1,11 @@
+const crypto = require('node:crypto');
 const express = require('express');
 const router = express.Router();
 const Company = require('../models/Company');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
+const { localClock } = require('../services/telegram');
+const { bounds } = require('../services/dailyStats');
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization;
@@ -19,6 +22,7 @@ const authMiddleware = (req, res, next) => {
 
 // Keldi/Ketdi belgilash
 router.post('/mark', authMiddleware, async (req, res) => {
+  let lockOwner;
   try {
     const { qrData, type, faceVerified } = req.body;
     const userId = req.user.id;
@@ -36,16 +40,21 @@ router.post('/mark', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Yuzni tasdiqlash majburiy' });
     }
 
+    const lease = crypto.randomUUID();
+    const now = new Date();
+    const locked = await User.findOneAndUpdate({ _id: userId, companyId, $and: [
+      { $or: [{ attendanceLockUntil: { $exists: false } }, { attendanceLockUntil: { $lt: now } }] },
+      { $or: [{ lastAttendanceAt: { $exists: false } }, { lastAttendanceAt: { $lt: new Date(now.getTime() - 5000) } }] }
+    ] }, { $set: { attendanceLockUntil: new Date(now.getTime() + 60000), attendanceLockOwner: lease } });
+    if (!locked) return res.status(409).json({ message: 'Qayd qabul qilingan yoki qayta ishlanmoqda. 5 soniyadan keyin holatni tekshiring.' });
+    lockOwner = lease;
     // Bugungi kungi yozuvlar sonini hisoblash
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const { start: startOfDay, end: endOfDay } = bounds(localClock().day);
 
     const countToday = await Attendance.countDocuments({
       userId,
       companyId,
-      timestamp: { $gte: startOfDay, $lte: endOfDay }
+      timestamp: { $gte: startOfDay, $lt: endOfDay }
     });
 
     // Agar 0, 2, 4 bo'lsa (juft) -> 'keldi'
@@ -60,12 +69,24 @@ router.post('/mark', authMiddleware, async (req, res) => {
     });
 
     await attendance.save();
+    await User.updateOne({ _id: userId, attendanceLockOwner: lease }, { $set: { lastAttendanceAt: attendance.timestamp } });
 
-    res.status(201).json({ message: `Muvaffaqiyatli ${determinedType === 'keldi' ? 'keldingiz' : 'ketdingiz'}`, type: determinedType });
+    res.status(201).json({ message: `Muvaffaqiyatli ${determinedType === 'keldi' ? 'keldingiz' : 'ketdingiz'}`, type: determinedType, count: countToday + 1, status: determinedType === 'keldi' ? 'present' : 'departed' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });
+  } finally {
+    if (lockOwner) await User.updateOne({ _id: req.user.id, attendanceLockOwner: lockOwner }, { $unset: { attendanceLockUntil: 1, attendanceLockOwner: 1 } }).catch(() => {});
   }
+});
+
+router.get('/today', authMiddleware, async (req, res) => {
+  try {
+    const day = localClock().day;
+    const { start, end } = bounds(day);
+    const rows = await Attendance.find({ userId: req.user.id, companyId: req.user.companyId, timestamp: { $gte: start, $lt: end } }).sort({ timestamp: 1 }).select('timestamp');
+    res.json({ day, count: rows.length, status: !rows.length ? 'absent' : rows.length % 2 ? 'present' : 'departed', firstArrival: rows[0]?.timestamp || null, lastEvent: rows.at(-1)?.timestamp || null });
+  } catch { res.status(500).json({ message: 'Bugungi holatni olishda xato' }); }
 });
 
 // Xodimning davomat tarixini olish

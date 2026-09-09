@@ -50,4 +50,9 @@ async function syncSchedule(company, enabled) {
     await api(key, 'PATCH', `/jobs/${company[field]}`, { job: { ...spec, enabled } });
   }
 }
-module.exports = { SchedulerError, publicOrigin, jobSpec, syncSchedule };
+async function scheduleStatus(company) {
+  const list = await api(decrypt(company.cronApiKey), 'GET', '/jobs');
+  if (!Array.isArray(list.jobs) || list.someFailed) throw new SchedulerError('Jadvallar to‘liq olinmadi.');
+  return ['keldi', 'ketdi'].map(type => { const j = list.jobs.find(x => x.title === `HodimCheck ${company._id} ${type}`); return { type, found: !!j, enabled: !!j?.enabled, lastStatus: j?.lastStatus ?? null, lastExecution: j?.lastExecution ? new Date(j.lastExecution * 1000) : null, nextExecution: j?.nextExecution ? new Date(j.nextExecution * 1000) : null }; });
+}
+module.exports = { scheduleStatus, SchedulerError, publicOrigin, jobSpec, syncSchedule };

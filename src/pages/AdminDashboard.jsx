@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { LogOut, Settings, Users, CalendarDays, PlusCircle, CheckCircle, XCircle, Camera, Send, LayoutDashboard } from 'lucide-react';
+import ReportsDashboard from '../components/ReportsDashboard';
 import TelegramSettings from '../components/TelegramSettings';
 import AdminFaceUploader from '../components/AdminFaceUploader';
 
@@ -9,7 +10,7 @@ export default function AdminDashboard() {
   const [company, setCompany] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('main'); // main, users, attendance
+  const [activeTab, setActiveTab] = useState('dashboard'); // main, users, attendance
   
   // Data states
   const [users, setUsers] = useState([]);
@@ -223,14 +224,10 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="overview-grid">
-        <div className="overview-card"><span>Jami xodimlar</span><strong>{users.filter(u => u.role !== 'admin').length}</strong><Users size={21}/></div>
-        <div className="overview-card"><span>Bugun kelganlar</span><strong>{new Set(attendance.filter(a => a.type === 'keldi' && new Date(a.timestamp).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' })).map(a => a.employeeId)).size}</strong><CheckCircle size={21}/></div>
-        <div className="overview-card"><span>Kutilayotgan so‘rovlar</span><strong>{leaveRequests.filter(r => r.status === 'pending').length}</strong><CalendarDays size={21}/></div>
-      </div>
       <nav className="admin-tabs" aria-label="Admin bo‘limlari">
+        <button className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('dashboard')}><LayoutDashboard size={20}/> Dashboard</button>
         <button className={`btn ${activeTab === 'main' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('main')}>
-          <LayoutDashboard size={20} /> Asosiy
+          <Settings size={20} /> Sozlamalar
         </button>
         <button className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('users')}>
           <Users size={20} /> Xodimlar
@@ -244,6 +241,7 @@ export default function AdminDashboard() {
         <button className={`btn ${activeTab === 'telegram' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('telegram')}><Send size={20}/> Telegram</button>
       </nav>
 
+      {activeTab === 'dashboard' && <ReportsDashboard companyId={company._id}/>}
       {activeTab === 'telegram' && <TelegramSettings companyId={company._id}/>}
 
       {activeTab === 'main' && (
@@ -417,7 +415,7 @@ export default function AdminDashboard() {
               <tbody>
                 {attendance.map(a => (
                   <tr key={a._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '12px' }}>{new Date(a.timestamp).toLocaleString('uz-UZ')}</td>
+                    <td style={{ padding: '12px' }}>{new Date(a.timestamp).toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' })}</td>
                     <td style={{ padding: '12px' }}>{a.fullName} <span style={{ opacity: 0.5 }}>({a.employeeId})</span></td>
                     <td style={{ padding: '12px' }}>
                       {a.type === 'keldi' ? (

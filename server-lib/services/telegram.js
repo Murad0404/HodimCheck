@@ -29,7 +29,12 @@ async function telegram(token, method, body = {}) {
   const result = await response.json();
   if (!response.ok || !result.ok) {
     const messages = {401: 'Bot tokeni noto‘g‘ri.', 403: 'Bot bloklangan yoki chatga yozish huquqi yo‘q.', 400: 'Chat topilmadi yoki bot chatga qo‘shilmagan.', 429: 'Telegram so‘rov limiti. Keyinroq urinib ko‘ring.'};
-    throw new Error(messages[result.error_code] || 'Telegram so‘rovni bajara olmadi.');
+    const description = String(result.description || '').toLowerCase();
+    let message = messages[result.error_code] || 'Telegram so‘rovni bajara olmadi.';
+    if (description.includes('blocked') || description.includes('initiate conversation')) message = 'Bot shaxsiy chatga yoza olmayapti. Botni ochib /start bosing va blokdan chiqaring.';
+    else if (description.includes('rights') || description.includes('administrator') || description.includes('kicked')) message = 'Botga guruh yoki kanalda xabar yozish huquqini bering.';
+    else if (method === 'setWebhook' && result.error_code === 400) message = 'Webhook ulanmagan: sayt HTTPS manzili va Vercel deployini tekshiring.';
+    throw new Error(message);
   }
   return result.result;
 }

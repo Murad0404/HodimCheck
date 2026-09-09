@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const router = require('express').Router();
 const Company = require('../models/Company');
-const Attendance = require('../models/Attendance');
+const { dailyStats, statsMessages } = require('../services/dailyStats');
 const Delivery = require('../models/TelegramDelivery');
 const { decrypt, telegram, localClock, reportWindow, reportChunks } = require('../services/telegram');
 router.get('/telegram', async (req, res) => {
@@ -14,6 +14,7 @@ router.get('/telegram', async (req, res) => {
       const actual = Buffer.from(req.headers.authorization || '');
       const expected = Buffer.from(`Bearer ${owner?.cronCallbackSecret || ''}`);
       if (!owner?.cronCallbackSecret || actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.status(401).json({ message: 'Ruxsat yo‘q' });
+      await Company.updateOne({ _id: scoped }, { $set: { telegramLastCronAt: new Date(), telegramLastCronResult: owner.telegramEnabled ? 'Hisobot tekshirilmoqda' : 'Avtomatik yuborish o‘chirilgan' } });
     }
     await Delivery.init();
     const now = new Date();
@@ -24,17 +25,19 @@ router.get('/telegram', async (req, res) => {
       for (const type of (scoped ? [req.query.type] : ['keldi', 'ketdi'])) {
         const due = c[type === 'keldi' ? 'reportTimeKeldi' : 'reportTimeKetdi'];
         const { start, end } = reportWindow(day, due);
-        // Catch up within today, but never send a report that predates activation/settings changes.
-        if (time < due || !c.telegramBotToken || !c.telegramChatId || (c.telegramConfiguredAt && c.telegramConfiguredAt > end)) continue;
+        if (time < due || !c.telegramBotToken || !c.telegramChatId) {
+          await Company.updateOne({ _id: c._id }, { $set: { telegramLastCronResult: time < due ? `Hisobot vaqti hali kelmagan: ${due}` : 'Bot yoki chat sozlanmagan' } });
+          continue;
+        }
         const key = `${c._id}:${day}:${type}`;
         try { await Delivery.updateOne({ key }, { $setOnInsert: { key, status: 'pending', nextChunk: 0 } }, { upsert: true }); }
         catch (error) { if (error.code !== 11000) throw error; }
         const job = await Delivery.findOneAndUpdate({ key, status: { $ne: 'sent' }, $or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lt: now } }] }, { $set: { leaseUntil: new Date(Date.now() + 300000) } }, { new: true });
-        if (!job) continue;
+        if (!job) { await Company.updateOne({ _id: c._id }, { $set: { telegramLastCronResult: 'Hisobot oldin yuborilgan yoki yuborilmoqda' } }); continue; }
         try {
           if (!job.chunks.length) {
-            const rows = await Attendance.find({ companyId: c._id, type, timestamp: { $gte: start, $lt: end } }).populate('userId', 'fullName').sort({ timestamp: 1 });
-            job.chunks = reportChunks(c, type, day, rows);
+            const stats = await dailyStats(c._id, day, end);
+            job.chunks = statsMessages(c, stats, `${type === 'keldi' ? 'Keldi' : 'Ketdi'} hisoboti · ${due}`);
             await job.save();
           }
           const token = decrypt(c.telegramBotToken);
@@ -44,11 +47,11 @@ router.get('/telegram', async (req, res) => {
             await Delivery.updateOne({ key }, { $set: { nextChunk: i + 1 } });
           }
           await Delivery.updateOne({ key }, { $set: { status: 'sent', sentAt: new Date() }, $unset: { leaseUntil: 1 } });
-          await Company.updateOne({ _id: c._id }, { $set: { telegramLastSentAt: new Date(), telegramLastError: '' } });
+          await Company.updateOne({ _id: c._id }, { $set: { telegramLastSentAt: new Date(), telegramLastError: '', telegramLastCronResult: `${type} hisoboti yuborildi` } });
           sent++;
-        } catch {
+        } catch (error) {
           failed++;
-          await Company.updateOne({ _id: c._id }, { $set: { telegramLastError: 'Hisobot yuborilmadi. Bot va chat huquqlarini tekshiring; cron-job.org orqali qayta ishga tushiring.' } });
+          await Company.updateOne({ _id: c._id }, { $set: { telegramLastError: error.message || 'Hisobot yuborilmadi', telegramLastCronResult: `${type} hisobotida xato` } });
           await Delivery.updateOne({ key }, { $set: { leaseUntil: new Date(Date.now() + 60000) } });
         }
       }

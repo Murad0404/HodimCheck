@@ -232,4 +232,24 @@ router.get('/:id/attendance', authMiddleware, adminMiddleware, async (req, res) 
   }
 });
 
+router.get('/:id/dashboard', authMiddleware, adminMiddleware, async (req, res) => {
+  const { validDay, bounds, summarize } = require('../services/dailyStats');
+  const { localClock } = require('../services/telegram');
+  const day = req.query.day || localClock().day;
+  if (!validDay(day) || day > localClock().day) return res.status(400).json({ message: 'Bugungi yoki o‘tgan sanani tanlang' });
+  try {
+    const { start, end } = bounds(day);
+    const weekStart = new Date(start.getTime() - 6 * 86400000);
+    const [users, rows] = await Promise.all([
+      User.find({ companyId: req.params.id, role: 'employee' }).select('fullName employeeId position createdAt role').lean(),
+      Attendance.find({ companyId: req.params.id, timestamp: { $gte: weekStart, $lt: end } }).select('userId timestamp').lean()
+    ]);
+    const series = Array.from({ length: 7 }, (_, i) => {
+      const d = localClock(new Date(weekStart.getTime() + i * 86400000)).day;
+      const { employees, ...summary } = summarize(users, rows, d); return summary;
+    });
+    res.json({ ...summarize(users, rows, day), series, updatedAt: new Date() });
+  } catch { res.status(500).json({ message: 'Statistikani yuklab bo‘lmadi' }); }
+});
+
 module.exports = router;

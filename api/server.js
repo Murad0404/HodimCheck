@@ -55,6 +55,7 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
+app.use('/api/bot', require('../server-lib/routes/bot'));
 app.use('/api/telegram', require('../server-lib/routes/telegram'));
 app.use('/api/cron', require('../server-lib/routes/cron'));
 app.use('/api/auth', authRoutes);

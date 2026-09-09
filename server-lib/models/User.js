@@ -6,6 +6,9 @@ const UserSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   position: { type: String, required: true },
   role: { type: String, enum: ['admin', 'employee'], default: 'employee' },
+  attendanceLockUntil: { type: Date, select: false },
+  attendanceLockOwner: { type: String, select: false },
+  lastAttendanceAt: { type: Date, select: false },
   password: { type: String, required: false }, // required: false because it will be set later
   isFirstLogin: { type: Boolean, default: true },
   faceDescriptor: { type: [Number], default: [] }, // Array of numbers for face vector

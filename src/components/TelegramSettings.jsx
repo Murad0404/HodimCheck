@@ -6,6 +6,8 @@ export default function TelegramSettings({ companyId }) {
   const [schedulerApiKey, setSchedulerApiKey] = useState('');
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [invalidField, setInvalidField] = useState('');
   const [dirty, setDirty] = useState(false);
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
   async function load() {
@@ -18,24 +20,36 @@ export default function TelegramSettings({ companyId }) {
     finally { setBusy(''); }
   }
   useEffect(() => { load(); }, [companyId]);
-  function change(key, value) { setForm(f => ({ ...f, [key]: value })); setDirty(true); setNotice(null); }
+  function change(key, value) { setForm(f => ({ ...f, [key]: value })); setDirty(true); setNotice(null); setInvalidField(''); }
   async function action(event, test = false) {
-    event.preventDefault(); setBusy(test ? 'test' : 'save'); setNotice(null);
+    event.preventDefault(); setInvalidField(''); setBusy(test ? 'test' : 'save'); setNotice(null);
     try {
       const res = await fetch(`/api/telegram/${companyId}${test ? '/test' : ''}`, { method: test ? 'POST' : 'PUT', headers, ...(test ? {} : { body: JSON.stringify({ token, schedulerApiKey, siteUrl: form.siteUrl, chatId: form.chatId, enabled: form.enabled, reportTimeKeldi: form.reportTimeKeldi, reportTimeKetdi: form.reportTimeKetdi }) }) });
-      const data = await res.json(); if (!res.ok) { if (data.settingsSaved) { setForm(data); setToken(''); setSchedulerApiKey(''); setDirty(false); } throw new Error(data.message); }
+      const data = await res.json(); if (!res.ok) { setInvalidField(data.field || ''); const target = { chatId: 'chat-id', reportTimeKeldi: 'arrival-time', reportTimeKetdi: 'departure-time', token: 'bot-token' }[data.field]; if (target) setTimeout(() => document.getElementById(target)?.focus(), 0); if (data.settingsSaved) { setForm(data); setToken(''); setSchedulerApiKey(''); setDirty(false); } throw new Error(data.message); }
+      if (test) setForm(f => ({ ...f, ...data }));
       if (!test) { setForm(data); setToken(''); setSchedulerApiKey(''); setDirty(false); }
       setNotice({ text: data.message });
     } catch (e) { setNotice({ error: true, text: e.message || 'Ulanishni tekshiring' }); }
     finally { setBusy(''); }
   }
+  async function extraAction(kind) {
+    setBusy(kind); setNotice(null);
+    try {
+      const res = await fetch(`/api/telegram/${companyId}/${kind}`, { method: kind === 'diagnostics' ? 'GET' : 'POST', headers });
+      const data = await res.json(); if (!res.ok) throw new Error(data.message);
+      if (kind === 'diagnostics') setDiagnostics(data);
+      else { setForm(f => ({ ...f, ...data })); setNotice({ text: data.message }); }
+    } catch (e) { setNotice({ error: true, text: e.message }); }
+    finally { setBusy(''); }
+  }
+  const displayTime = value => value ? new Date(value).toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }) : 'Hali yo‘q';
   if (!form) return <div className="glass-panel"><p role="status">{notice?.text || 'Telegram sozlamalari yuklanmoqda…'}</p><button className="btn btn-outline" disabled={!!busy} onClick={load}><RefreshCw size={18}/> Qayta yuklash</button></div>;
   return <div className="telegram-layout">
     <form className="glass-panel telegram-form" onSubmit={action}>
-      <div className="section-heading"><div className="integration-icon"><Send size={25}/></div><div><h3>Telegram bot</h3><p>Davomat hisoboti — kerakli vaqtda.</p></div><span className={`connection-state ${form.configured ? 'connected' : ''}`}>{form.configured ? 'Ulangan' : 'Ulanmagan'}</span></div>
+      <div className="section-heading"><div className="integration-icon"><Send size={25}/></div><div><h3>Telegram bot</h3><p>Davomat hisoboti — kerakli vaqtda.</p></div><span className={`connection-state ${form.verifiedAt ? 'connected' : ''}`}>{form.verifiedAt ? 'Xabar yuborish tekshirilgan' : form.configured ? 'Token saqlangan' : 'Ulanmagan'}</span></div>
       <fieldset disabled={!!busy}>
         <div className="form-group"><label htmlFor="bot-token">Bot tokeni</label><input id="bot-token" type="password" className="form-input" value={token} onChange={e => { setToken(e.target.value); setDirty(true); }} placeholder={form.configured ? 'Token saqlangan. Almashtirish uchun kiriting' : 'BotFather bergan token'} autoComplete="new-password" required={!form.configured}/><small><ShieldCheck size={14}/> Token shifrlanib saqlanadi va qayta ko‘rsatilmaydi.</small></div>
-        <div className="form-group"><label htmlFor="chat-id">Hisobot yuboriladigan Chat ID</label><input id="chat-id" className="form-input" value={form.chatId} onChange={e => change('chatId', e.target.value)} placeholder="Masalan: -1001234567890" required/><small>Shaxsiy chat, guruh ID raqami yoki kanalning @username nomi.</small></div>
+        <div className="form-group"><label htmlFor="chat-id">Hisobot yuboriladigan Chat ID</label><input id="chat-id" aria-invalid={invalidField === 'chatId'} className="form-input" value={form.chatId} onChange={e => change('chatId', e.target.value)} placeholder="Masalan: -1001234567890" required/><small>Guruh uchun -100… ID raqami yoki @guruh_nomi. Ommaviy t.me/guruh_nomi havolasi ham mumkin; taklif havolasi mos kelmaydi.</small></div>
         <div className="scheduler-connection">
           <h4>Avtomatik jadvalni ulash</h4>
           <p>Bir marta ulang. Keyin hisobot vaqtlarini shu paneldan boshqarasiz.</p>
@@ -44,10 +58,14 @@ export default function TelegramSettings({ companyId }) {
           <span className={`connection-state ${form.schedulerStatus === 'synced' ? 'connected' : ''}`}>{({ synced: 'Jadval ulangan', paused: 'Jadval to‘xtatilgan', syncing: 'Jadval yangilanmoqda', error: 'Jadvalni qayta saqlang' })[form.schedulerStatus] || 'Jadval ulanmagan'}</span>
         </div>
         <div className="schedule-heading"><Clock3 size={18}/><h4>Hisobot vaqtlari</h4><span>Toshkent · UTC+5</span></div>
-        <div className="schedule-grid"><label className="schedule-card" htmlFor="arrival-time"><span className="schedule-type arrival">Keldi hisoboti</span><input id="arrival-time" type="time" className="form-input" value={form.reportTimeKeldi} onChange={e => change('reportTimeKeldi', e.target.value)} required/><small>Bugungi kelish qaydlari</small></label><label className="schedule-card" htmlFor="departure-time"><span className="schedule-type departure">Ketdi hisoboti</span><input id="departure-time" type="time" className="form-input" value={form.reportTimeKetdi} onChange={e => change('reportTimeKetdi', e.target.value)} required/><small>Bugungi ketish qaydlari</small></label></div>
+        <div className="schedule-grid"><label className="schedule-card" htmlFor="arrival-time"><span className="schedule-type arrival">Keldi hisoboti</span><input id="arrival-time" aria-invalid={invalidField === 'reportTimeKeldi'} step="60" type="time" className="form-input" value={form.reportTimeKeldi} onChange={e => change('reportTimeKeldi', e.target.value)} required/><small>Bugungi kelish qaydlari</small></label><label className="schedule-card" htmlFor="departure-time"><span className="schedule-type departure">Ketdi hisoboti</span><input id="departure-time" aria-invalid={invalidField === 'reportTimeKetdi'} step="60" type="time" className="form-input" value={form.reportTimeKetdi} onChange={e => change('reportTimeKetdi', e.target.value)} required/><small>Bugungi ketish qaydlari</small></label></div>
         <label className="toggle-row"><span><strong>Avtomatik yuborish</strong><small>Har kuni belgilangan vaqtlarda</small></span><input type="checkbox" role="switch" checked={form.enabled} onChange={e => change('enabled', e.target.checked)}/></label>
         <div className="telegram-actions"><button className="btn btn-primary" type="submit">{busy === 'save' ? 'Tekshirilmoqda…' : 'Sozlamalarni saqlash'}</button><button className="btn btn-outline" type="button" disabled={!form.configured || dirty || !!token} onClick={e => action(e, true)}><Send size={17}/>{busy === 'test' ? 'Yuborilmoqda…' : 'Sinov xabari'}</button></div>
+        <div className="telegram-extra-actions"><button type="button" className="btn btn-outline" disabled={!form.configured || dirty} onClick={() => extraAction('report')}>Bugungi hisobotni yuborish</button><button type="button" className="btn btn-outline" disabled={!form.configured} onClick={() => extraAction('diagnostics')}>Ulanishni tekshirish</button></div>
       </fieldset>
+      <p className="verification-note">Yangi bot yoki chatni saqlashda bitta tasdiqlash xabari yuboriladi. “Sinov xabari” botning /start, /sinov va /hisobot buyruqlarini ham ulaydi.</p>
+      {form.chatTitle && <p className="verification-note">Qabul qiluvchi: <strong>{form.chatTitle}</strong> · {form.chatId}</p>}
+      {diagnostics && <div className="bot-diagnostics" role="status"><h4>Ulanish holati</h4><p>Bot buyruqlari: {diagnostics.webhookMatches ? 'Saytga ulangan' : 'Ulanmagan — Sinov xabari tugmasini bosing'}</p>{diagnostics.webhookDeliveryError && <p className="notice-error">{diagnostics.webhookDeliveryError}</p>}<p>Kutilayotgan Telegram xabarlari: {diagnostics.webhookPending ?? 0}</p><p>Oxirgi jadval so‘rovi: {displayTime(diagnostics.lastCronAt)}</p><p>Natija: {diagnostics.lastCronResult || 'Hali so‘rov kelmagan'}</p><ul>{diagnostics.scheduler?.map(s => <li key={s.type}>{s.type === 'keldi' ? 'Keldi' : 'Ketdi'}: {s.found ? s.enabled ? 'Faol' : 'O‘chirilgan' : 'Jadval topilmadi'} · keyingi: {displayTime(s.nextExecution)} · oxirgi: {s.lastStatus === 1 ? 'Muvaffaqiyatli' : s.lastStatus ? 'Xato — cron-job.org tarixini tekshiring' : 'Bajarilmagan'}</li>)}</ul></div>}
       {notice && <div className={`notice ${notice.error ? 'notice-error' : 'notice-success'}`} role={notice.error ? 'alert' : 'status'}>{notice.text}</div>}
       {form.schedulerError && <div className="notice notice-error" role="alert">{form.schedulerError}</div>}
       {form.lastError && <div className="notice notice-error">{form.lastError}</div>}

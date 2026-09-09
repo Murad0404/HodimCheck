@@ -9,6 +9,13 @@ const companySchema = new mongoose.Schema({
     lat: { type: Number },
     lng: { type: Number }
   },
+  telegramWebhookSecret: { type: String, default: '', select: false },
+  telegramWebhookReady: { type: Boolean, default: false },
+  telegramWebhookError: { type: String, default: '' },
+  telegramChatTitle: { type: String, default: '' },
+  telegramVerifiedAt: Date,
+  telegramLastCronAt: Date,
+  telegramLastCronResult: { type: String, default: '' },
   telegramBotToken: { type: String, default: '', select: false },
   cronApiKey: { type: String, default: '', select: false },
   cronCallbackSecret: { type: String, default: '', select: false },

@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import FaceScanner from '../components/FaceScanner';
 
 export default function Scanner() {
+  const [todayStatus, setTodayStatus] = useState(null);
+  const [todayError, setTodayError] = useState('');
   const [view, setView] = useState('dashboard'); // 'dashboard', 'scanner', 'leave'
   const [scanResult, setScanResult] = useState(null);
   const [faceCheckRequired, setFaceCheckRequired] = useState(false);
@@ -30,6 +32,20 @@ export default function Scanner() {
       navigate('/login');
     }
   }, []);
+
+  const fetchTodayStatus = async () => {
+    try {
+      const res = await fetch('/api/attendance/today', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json(); if (!res.ok) throw new Error(data.message);
+      setTodayStatus(data); setTodayError('');
+    } catch { setTodayError('Bugungi holat yuklanmadi. Qayta yangilang.'); }
+  };
+  useEffect(() => {
+    if (view === 'dashboard') fetchTodayStatus();
+    const update = () => { if (!document.hidden) fetchTodayStatus(); };
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, [view]);
 
   const fetchCompanyData = async () => {
     try {
@@ -151,6 +167,7 @@ export default function Scanner() {
       });
       const data = await res.json();
       if(res.ok) {
+        fetchTodayStatus();
         setStatus(`✅ ${data.message}`);
         setTimeout(() => {
           setScanResult(null);
@@ -298,6 +315,7 @@ export default function Scanner() {
       
       {status && <div style={{ color: 'var(--primary)', textAlign: 'center', fontWeight: 'bold' }}>{status}</div>}
 
+      <div className="glass-panel employee-today"><span className="eyebrow">BUGUNGI HOLATINGIZ</span>{todayStatus ? <><strong className={`attendance-status ${todayStatus.status}`}>{({ present: 'Kelgansiz · hozir ishda', departed: 'Ketgansiz', absent: 'Hali qayd yo‘q' })[todayStatus.status]}</strong><p>{todayStatus.count} ta qayd · {todayStatus.day}</p><small>Har bir skaner holatni almashtiradi: keldi → ketdi → keldi.</small></> : <p>{todayError || 'Holat yuklanmoqda…'}</p>}<button className="btn btn-outline" onClick={fetchTodayStatus}>Holatni yangilash</button></div>
       <div className="employee-actions">
         <button className="scan-action" onClick={handleOpenScanner} disabled={!companyData || !!status}><QrCode size={36}/><span><strong>Keldi-ketdini belgilash</strong><small>Ofis QR kodini skaner qiling</small></span><span aria-hidden="true">↗</span></button>
         <button className="leave-action" onClick={() => setView('leave')}><Calendar size={23}/><span>Dam olish kuni so‘rash</span><span aria-hidden="true">→</span></button>

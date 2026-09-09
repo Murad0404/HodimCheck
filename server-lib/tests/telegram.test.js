@@ -4,15 +4,16 @@ const crypto = require('node:crypto');
 const jwt = require('jsonwebtoken');
 const service = require('../services/telegram');
 const Company = require('../models/Company');
+const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 const Delivery = require('../models/TelegramDelivery');
 const routes = require('../routes/telegram');
 const cron = require('../routes/cron');
-const originals = { lock: Company.findOneAndUpdate, find: Company.find, byId: Company.findById, update: Company.updateOne, attendance: Attendance.find, init: Delivery.init, deliveryUpdate: Delivery.updateOne, claim: Delivery.findOneAndUpdate, fetch: global.fetch };
+const originals = { users: User.find, lock: Company.findOneAndUpdate, find: Company.find, byId: Company.findById, update: Company.updateOne, attendance: Attendance.find, init: Delivery.init, deliveryUpdate: Delivery.updateOne, claim: Delivery.findOneAndUpdate, fetch: global.fetch };
 function response() { return { statusCode: 200, status(n) { this.statusCode = n; return this; }, json(body) { this.body = body; return this; } }; }
 const route = (router, path, method) => router.stack.find(s => s.route?.path === path && s.route.methods[method]).route.stack[0].handle;
 beforeEach(() => { process.env.JWT_SECRET = 'unit-test-jwt-key'; process.env.TELEGRAM_ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex'); process.env.CRON_SECRET = 'test-cron'; });
-afterEach(() => { Company.findOneAndUpdate = originals.lock; Company.find = originals.find; Company.findById = originals.byId; Company.updateOne = originals.update; Attendance.find = originals.attendance; Delivery.init = originals.init; Delivery.updateOne = originals.deliveryUpdate; Delivery.findOneAndUpdate = originals.claim; global.fetch = originals.fetch; });
+afterEach(() => { User.find = originals.users; Company.findOneAndUpdate = originals.lock; Company.find = originals.find; Company.findById = originals.byId; Company.updateOne = originals.update; Attendance.find = originals.attendance; Delivery.init = originals.init; Delivery.updateOne = originals.deliveryUpdate; Delivery.findOneAndUpdate = originals.claim; global.fetch = originals.fetch; });
 test('Toshkent midnight and daily cutoff remain independent of server timezone', () => {
   assert.deepEqual(service.localClock(new Date('2026-09-09T19:01:00Z')), { day: '2026-09-10', time: '00:01' });
   const window = service.reportWindow('2026-09-09', '11:00');
@@ -74,7 +75,8 @@ test('cron sends due report once, skips future report, and uses scheduled cutoff
     if (state.status === 'sent' || state.leaseUntil > now) return null;
     Object.assign(state, change.$set); return state;
   };
-  Attendance.find = q => { query = q; return { populate: () => ({ sort: async () => [] }) }; };
+  User.find = () => ({ select: () => ({ lean: async () => [] }) });
+  Attendance.find = q => { query = q; return { select: () => ({ lean: async () => [] }) }; };
   global.fetch = async () => { sends++; return { ok: true, json: async () => ({ ok: true, result: {} }) }; };
   const handler = route(cron, '/telegram', 'get');
   const req = { headers: { authorization: 'Bearer test-cron' } };
@@ -100,7 +102,7 @@ test('failed scheduler sync saves keys but disables automatic sending with visib
   Company.findById = () => ({ select: async () => c });
   Company.findOneAndUpdate = async () => c;
   Company.updateOne = async () => {};
-  global.fetch = async url => url.startsWith('https://api.telegram.org') ? { ok: true, json: async () => ({ ok: true, result: { username: 'test_bot' } }) } : { ok: false, status: 429 };
+  global.fetch = async url => url.startsWith('https://api.telegram.org') ? { ok: true, json: async () => ({ ok: true, result: url.endsWith('/getMe') ? { id: 123456, username: 'test_bot' } : url.endsWith('/getChat') ? { id: 123, first_name: 'Admin' } : { message_id: 1 } }) } : { ok: false, status: 429 };
   const res = response();
   await route(routes, '/:id', 'put')({ params: { id: c._id }, body: { token: '123456:fake_token_for_unit_test_only', schedulerApiKey: 'cron-private-key', siteUrl: 'https://hodim-check.vercel.app', chatId: '123', enabled: true, reportTimeKeldi: '09:00', reportTimeKetdi: '18:00' } }, res);
   assert.equal(res.statusCode, 502); assert.equal(res.body.settingsSaved, true);
