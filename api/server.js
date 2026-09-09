@@ -3,10 +3,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-const authRoutes = require('./routes/auth');
-const companyRoutes = require('./routes/company');
-const attendanceRoutes = require('./routes/attendance');
-const leaveRoutes = require('./routes/leave');
+const authRoutes = require('../server-lib/routes/auth');
+const companyRoutes = require('../server-lib/routes/company');
+const attendanceRoutes = require('../server-lib/routes/attendance');
+const leaveRoutes = require('../server-lib/routes/leave');
 
 const app = express();
 
@@ -55,8 +55,8 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
-app.use('/api/telegram', require('./routes/telegram'));
-app.use('/api/cron', require('./routes/cron'));
+app.use('/api/telegram', require('../server-lib/routes/telegram'));
+app.use('/api/cron', require('../server-lib/routes/cron'));
 app.use('/api/auth', authRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/attendance', attendanceRoutes);
