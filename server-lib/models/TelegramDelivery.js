@@ -5,6 +5,7 @@ const schema = new mongoose.Schema({
   leaseUntil: Date,
   nextChunk: { type: Number, default: 0 },
   chunks: [String],
+  recipientProgress: [{ chatId: String, nextChunk: { type: Number, default: 0 } }],
   sentAt: Date
 }, { timestamps: true });
 module.exports = mongoose.model('TelegramDelivery', schema);

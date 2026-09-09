@@ -2,7 +2,8 @@ const router = require('express').Router();
 const jwt = require('jsonwebtoken');
 const { connectWebhook, testDelivery } = require('../services/botConnection');
 const crypto = require('node:crypto');
-const { SettingsError, validateSettings } = require('../services/telegramSettings');
+const { recipients, deliverToRecipients, failureMessage } = require('../services/recipients');
+const { SettingsError, validateSettings, normalizeChatId } = require('../services/telegramSettings');
 const { SchedulerError, publicOrigin, syncSchedule } = require('../services/cronScheduler');
 const Company = require('../models/Company');
 const { TIME, encrypt, decrypt, telegram } = require('../services/telegram');
@@ -13,7 +14,7 @@ router.use('/:id', (req, res, next) => {
     next();
   } catch { res.status(401).json({ message: 'Tizimga qayta kiring' }); }
 });
-const safe = c => ({ webhookReady: !!c.telegramWebhookReady, webhookError: c.telegramWebhookError || '', verifiedAt: c.telegramVerifiedAt, chatTitle: c.telegramChatTitle || '', lastCronAt: c.telegramLastCronAt, lastCronResult: c.telegramLastCronResult || '', schedulerConfigured: !!c.cronApiKey, siteUrl: c.cronSiteUrl || '', schedulerStatus: c.cronSyncStatus || 'not_connected', schedulerError: c.cronSyncError || '', configured: !!c.telegramBotToken, enabled: !!c.telegramEnabled, botUsername: c.telegramBotUsername || '', chatId: c.telegramChatId || '', reportTimeKeldi: c.reportTimeKeldi, reportTimeKetdi: c.reportTimeKetdi, lastSentAt: c.telegramLastSentAt, lastError: c.telegramLastError || '' });
+const safe = c => ({ recipients: recipients(c), webhookReady: !!c.telegramWebhookReady, webhookError: c.telegramWebhookError || '', verifiedAt: c.telegramVerifiedAt, chatTitle: c.telegramChatTitle || '', lastCronAt: c.telegramLastCronAt, lastCronResult: c.telegramLastCronResult || '', schedulerConfigured: !!c.cronApiKey, siteUrl: c.cronSiteUrl || '', schedulerStatus: c.cronSyncStatus || 'not_connected', schedulerError: c.cronSyncError || '', configured: !!c.telegramBotToken, enabled: !!c.telegramEnabled, botUsername: c.telegramBotUsername || '', chatId: c.telegramChatId || '', reportTimeKeldi: c.reportTimeKeldi, reportTimeKetdi: c.reportTimeKetdi, lastSentAt: c.telegramLastSentAt, lastError: c.telegramLastError || '' });
 router.get('/:id', async (req, res) => {
   try {
     const c = await Company.findById(req.params.id).select('+telegramBotToken +cronApiKey +cronCallbackSecret +telegramWebhookSecret');
@@ -72,8 +73,14 @@ router.post('/:id/test', async (req, res) => {
     c = await Company.findById(req.params.id).select('+telegramBotToken +telegramWebhookSecret +cronApiKey');
     if (!c?.telegramBotToken || !c.telegramChatId) return res.status(400).json({ message: 'Avval bot sozlamalarini saqlang' });
     await connectWebhook(c);
-    const result = await testDelivery(c);
-    res.json({ ...safe(c), message: `Sinov xabari yuborildi: ${result.chatTitle} (Chat ID: ${result.chatId}).`, messageId: result.messageId });
+    let primary;
+    try { const first = await testDelivery(c); primary = { chatId: first.chatId, title: first.chatTitle, primary: true, ok: true }; }
+    catch (error) { primary = { chatId: c.telegramChatId, title: c.telegramChatTitle || 'Asosiy chat', primary: true, ok: false, error: error.message }; }
+    const others = await deliverToRecipients(c, ['✅ HodimCheck sinov xabari. Bu chat hisobot oluvchilar ro‘yxatiga kiritilgan.'], { excludePrimary: true });
+    const results = [primary, ...others.results];
+    const failed = results.filter(r => !r.ok).length;
+    c.telegramLastError = failureMessage({ results }); await c.save();
+    res.json({ ...safe(c), deliveryResults: results, failed, message: `${results.length - failed} ta chatga sinov xabari yuborildi.${failed ? ` ${failed} ta chatda xato bor.` : ''}` });
   } catch (error) {
     const message = error.message || 'Sinov xabari yuborilmadi';
     if (c) { c.telegramLastError = message; await c.save().catch(() => {}); }
@@ -86,15 +93,44 @@ router.post('/:id/report', async (req, res) => {
     c = await Company.findById(req.params.id).select('+telegramBotToken +cronApiKey');
     if (!c?.telegramBotToken || !c.telegramChatId) return res.status(400).json({ message: 'Avval bot va chatni saqlang' });
     const { dailyStats, statsMessages } = require('../services/dailyStats');
-    const token = decrypt(c.telegramBotToken);
     const chunks = statsMessages(c, await dailyStats(c._id));
-    for (const text of chunks) await telegram(token, 'sendMessage', { chat_id: c.telegramChatId, text });
-    c.telegramLastSentAt = new Date(); c.telegramLastError = ''; await c.save();
-    res.json({ ...safe(c), message: 'Bugungi statistika Telegramga yuborildi.' });
+    const result = await deliverToRecipients(c, chunks);
+    if (result.sent) c.telegramLastSentAt = new Date();
+    c.telegramLastError = failureMessage(result); await c.save();
+    res.json({ ...safe(c), deliveryResults: result.results, failed: result.failed, message: `${result.sent} ta chatga bugungi hisobot yuborildi.${result.failed ? ` ${result.failed} ta chatda xato bor.` : ''}` });
   } catch (error) {
     if (c) { c.telegramLastError = error.message; await c.save().catch(() => {}); }
     res.status(400).json({ message: error.message || 'Hisobot yuborilmadi' });
   }
+});
+router.post('/:id/recipients', async (req, res) => {
+  try {
+    const chatId = normalizeChatId(req.body.chatId);
+    const c = await Company.findById(req.params.id).select('+telegramBotToken');
+    if (!c?.telegramBotToken) return res.status(400).json({ message: 'Avval asosiy bot sozlamalarini saqlang' });
+    if ((c.telegramRecipients || []).length >= 19) return res.status(400).json({ message: 'Bir kompaniyaga jami 20 tagacha chat qo‘shish mumkin.' });
+    const token = decrypt(c.telegramBotToken);
+    const bot = await telegram(token, 'getMe');
+    const chat = await telegram(token, 'getChat', { chat_id: chatId });
+    if (String(chat.id) === String(bot.id) || (chat.username && chat.username.toLowerCase() === bot.username?.toLowerCase())) throw new SettingsError('chatId', 'Botning o‘zini emas, hisobot oladigan odam yoki guruhni qo‘shing.');
+    const canonical = String(chat.id);
+    if (recipients(c).some(r => r.chatId === canonical || (chat.username && r.chatId.toLowerCase() === `@${chat.username.toLowerCase()}`))) return res.status(409).json({ message: 'Bu chat allaqachon ro‘yxatda bor.' });
+    const title = String(chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || canonical).slice(0, 160);
+    await telegram(token, 'sendMessage', { chat_id: canonical, text: `✅ ${String(c.name).slice(0, 160)}
+Bu chatga HodimCheck davomat hisobotlarini yuborish tekshirildi.` });
+    const updated = await Company.findOneAndUpdate({ _id: c._id, telegramChatId: { $nin: [canonical, ...(chat.username ? [`@${chat.username}`] : [])] }, 'telegramRecipients.chatId': { $ne: canonical }, $expr: { $lt: [{ $size: { $ifNull: ['$telegramRecipients', []] } }, 19] } }, { $push: { telegramRecipients: { chatId: canonical, title } } }, { new: true });
+    if (!updated) return res.status(409).json({ message: 'Ro‘yxat o‘zgardi yoki bu chat qo‘shilgan. Sahifani yangilang.' });
+    res.json({ recipients: recipients(updated), message: `${title} qo‘shildi. Sinov xabari yuborildi.` });
+  } catch (error) { res.status(400).json({ message: error.message || 'Chatni qo‘shib bo‘lmadi' }); }
+});
+router.delete('/:id/recipients/:chatId', async (req, res) => {
+  try {
+    const c = await Company.findById(req.params.id);
+    if (!c) return res.status(404).json({ message: 'Kompaniya topilmadi' });
+    if (String(c.telegramChatId) === req.params.chatId) return res.status(400).json({ message: 'Asosiy chatni yuqoridagi Chat ID maydonida almashtiring.' });
+    const updated = await Company.findByIdAndUpdate(c._id, { $pull: { telegramRecipients: { chatId: req.params.chatId } } }, { new: true });
+    res.json({ recipients: recipients(updated), message: 'Chat olib tashlandi. Keyingi hisobotlar unga yuborilmaydi.' });
+  } catch { res.status(500).json({ message: 'Chatni olib tashlab bo‘lmadi' }); }
 });
 router.get('/:id/diagnostics', async (req, res) => {
   try {

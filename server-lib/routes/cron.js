@@ -1,3 +1,4 @@
+const { deliverToRecipients, failureMessage } = require('../services/recipients');
 const crypto = require('node:crypto');
 const router = require('express').Router();
 const Company = require('../models/Company');
@@ -40,12 +41,8 @@ router.get('/telegram', async (req, res) => {
             job.chunks = statsMessages(c, stats, `${type === 'keldi' ? 'Keldi' : 'Ketdi'} hisoboti · ${due}`);
             await job.save();
           }
-          const token = decrypt(c.telegramBotToken);
-          for (let i = job.nextChunk; i < job.chunks.length; i++) {
-            await Delivery.updateOne({ key }, { $set: { leaseUntil: new Date(Date.now() + 300000) } });
-            await telegram(token, 'sendMessage', { chat_id: c.telegramChatId, text: job.chunks[i] });
-            await Delivery.updateOne({ key }, { $set: { nextChunk: i + 1 } });
-          }
+          const result = await deliverToRecipients(c, job.chunks, { job });
+          if (result.failed) throw new Error(failureMessage(result));
           await Delivery.updateOne({ key }, { $set: { status: 'sent', sentAt: new Date() }, $unset: { leaseUntil: 1 } });
           await Company.updateOne({ _id: c._id }, { $set: { telegramLastSentAt: new Date(), telegramLastError: '', telegramLastCronResult: `${type} hisoboti yuborildi` } });
           sent++;

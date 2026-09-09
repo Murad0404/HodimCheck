@@ -31,6 +31,7 @@ const companySchema = new mongoose.Schema({
   telegramLastSentAt: { type: Date },
   telegramLastError: { type: String, default: '' },
   telegramChatId: { type: String, default: '' }, // Eski field - backward compat
+  telegramRecipients: [{ chatId: { type: String, required: true }, title: { type: String, default: '' }, addedAt: { type: Date, default: Date.now } }],
   telegramSubscribers: [{
     chatId: { type: String, required: true },
     firstName: { type: String, default: '' },

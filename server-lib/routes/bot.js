@@ -4,9 +4,7 @@ const Company = require('../models/Company');
 const Delivery = require('../models/TelegramDelivery');
 const { decrypt, telegram, localClock } = require('../services/telegram');
 const { dailyStats, statsMessages } = require('../services/dailyStats');
-function authorizedChat(company, chat) {
-  return String(company.telegramChatId) === String(chat.id) || (!!chat.username && company.telegramChatId.toLowerCase() === `@${chat.username.toLowerCase()}`);
-}
+const { authorizedRecipient: authorizedChat } = require('../services/recipients');
 function command(text, username) {
   const input = text.trim().toLowerCase();
   const first = input.split(/\s/)[0];
@@ -36,7 +34,7 @@ router.post('/:id', async (req, res) => {
     const job = await Delivery.findOneAndUpdate({ key, status: { $ne: 'sent' }, $or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lt: new Date() } }] }, { $set: { leaseUntil: new Date(Date.now() + 300000) } }, { new: true });
     if (!job) { const previous = await Delivery.findOne({ key }).select('status'); return res.sendStatus(previous?.status === 'sent' ? 200 : 503); }
     if (!job.chunks.length) {
-      if (action === 'hisobot') job.chunks = authorizedChat(company, message.chat) ? statsMessages(company, await dailyStats(company._id, localClock().day)) : ['Bu chatga hisobot olish huquqi berilmagan. Administrator panelda hisobot oladigan Chat ID ni belgilaydi.'];
+      if (action === 'hisobot') job.chunks = authorizedChat(company, message.chat) ? statsMessages(company, await dailyStats(company._id, localClock().day)) : ['Bu chatga hisobot olish huquqi berilmagan. Administrator ushbu chatni qabul qiluvchilar ro‘yxatiga qo‘shishi kerak.'];
       else if (action === 'start') job.chunks = [`Xush kelibsiz! 👋\nHodimCheck botiga ulandingiz.\n\nUshbu chat ID: ${message.chat.id}\n\n/sinov — botni tekshirish\n/hisobot — bugungi davomat\n\nHisobot shu chatga kelishi uchun ID ni admin panelga kiriting.`];
       else job.chunks = [`✅ Bot ishlayapti.\nChat ID: ${message.chat.id}`];
       await job.save();
