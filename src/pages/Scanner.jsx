@@ -285,31 +285,25 @@ export default function Scanner() {
   }
 
   return (
-    <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="employee-workspace">
+      <div className="employee-greeting flex items-center justify-between">
+        <div><span className="eyebrow">SHAXSIY KABINET</span>
           <h2 style={{ margin: 0 }}>Assalomu alaykum,</h2>
           <p style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)', fontWeight: '600' }}>{user.fullName}</p>
         </div>
-        <button onClick={handleLogout} className="btn btn-danger" style={{ width: 'auto', padding: '0.5rem', borderRadius: '50%' }}>
+        <button aria-label="Tizimdan chiqish" onClick={handleLogout} className="btn btn-outline" style={{ width: 'auto', padding: '0.5rem', borderRadius: '50%' }}>
           <LogOut size={20} />
         </button>
       </div>
       
       {status && <div style={{ color: 'var(--primary)', textAlign: 'center', fontWeight: 'bold' }}>{status}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="btn-icon-large" onClick={handleOpenScanner}>
-          <QrCode size={40} />
-          <span>QR Skaner</span>
-        </div>
-        <div className="btn-icon-large" onClick={() => setView('leave')} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
-          <Calendar size={40} />
-          <span style={{ textAlign: 'center' }}>Dam Olish So'rash</span>
-        </div>
+      <div className="employee-actions">
+        <button className="scan-action" onClick={handleOpenScanner} disabled={!companyData || !!status}><QrCode size={36}/><span><strong>Keldi-ketdini belgilash</strong><small>Ofis QR kodini skaner qiling</small></span><span aria-hidden="true">↗</span></button>
+        <button className="leave-action" onClick={() => setView('leave')}><Calendar size={23}/><span>Dam olish kuni so‘rash</span><span aria-hidden="true">→</span></button>
       </div>
 
-      <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+      <div className="glass-panel employee-history">
         <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>So'rovlaringiz tarixi</h3>
         {leaveRequests.length === 0 ? (
           <p className="text-center" style={{ marginTop: '2rem' }}>Hali hech qanday so'rov yo'q</p>

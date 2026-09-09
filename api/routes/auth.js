@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const Company = require('../models/Company');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Xodim ro'yxatdan o'tishi (Garchi hozir xodim o'zi ro'yxatdan o'tmasa ham qolib turadi)
 router.post('/register', async (req, res) => {

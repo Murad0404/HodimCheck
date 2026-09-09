@@ -9,7 +9,7 @@ const authMiddleware = (req, res, next) => {
   if (!token) return res.status(401).json({ message: 'Ruxsat yo\'q' });
   const jwt = require('jsonwebtoken');
   try {
-    const decoded = jwt.verify(token.split(' ')[1], process.env.JWT_SECRET || 'supersecretkey123');
+    const decoded = jwt.verify(token.split(' ')[1], process.env.JWT_SECRET);
     req.user = decoded;
     next();
   } catch (e) {

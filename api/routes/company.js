@@ -13,7 +13,8 @@ const authMiddleware = (req, res, next) => {
   if (!token) return res.status(401).json({ message: 'Ruxsat yo\'q' });
   const jwt = require('jsonwebtoken');
   try {
-    const decoded = jwt.verify(token.split(' ')[1], process.env.JWT_SECRET || 'supersecretkey123');
+    const decoded = jwt.verify(token.split(' ')[1], process.env.JWT_SECRET);
+    if (req.params.id && String(decoded.companyId) !== req.params.id) return res.status(403).json({ message: 'Bu kompaniyaga ruxsat yo‘q' });
     req.user = decoded;
     next();
   } catch (e) {
@@ -75,7 +76,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const company = await Company.findById(req.params.id);
     if (!company) return res.status(404).json({ message: 'Kompaniya topilmadi' });
-    res.json(company);
+    const safe = company.toObject();
+    delete safe.telegramSubscribers;
+    for (const key of Object.keys(safe)) if (key.startsWith('cron')) delete safe[key];
+    if (req.user.role !== 'admin') {
+      for (const key of Object.keys(safe)) if (key.startsWith('telegram') || key.startsWith('reportTime')) delete safe[key];
+    }
+    res.json(safe);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server xatosi' });

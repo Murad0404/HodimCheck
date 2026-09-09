@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { LogOut, Settings, Users, CalendarDays, PlusCircle, CheckCircle, XCircle, Camera } from 'lucide-react';
+import { LogOut, Settings, Users, CalendarDays, PlusCircle, CheckCircle, XCircle, Camera, Send, LayoutDashboard } from 'lucide-react';
+import TelegramSettings from '../components/TelegramSettings';
 import AdminFaceUploader from '../components/AdminFaceUploader';
 
 export default function AdminDashboard() {
   const [company, setCompany] = useState(null);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('main'); // main, users, attendance
   
@@ -29,9 +31,10 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Kompaniya ma’lumotlari yuklanmadi');
       setCompany(data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err.message);
     }
   };
 
@@ -90,7 +93,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchCompanyData().then(() => setLoading(false));
+    Promise.all([fetchCompanyData(), fetchUsers(), fetchAttendance(), fetchLeaveRequests()]).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -203,46 +206,55 @@ export default function AdminDashboard() {
   };
 
 
+  if (loadError) return <div className="glass-panel" role="alert"><p>{loadError}</p><button className="btn btn-primary" onClick={() => window.location.reload()}>Qayta yuklash</button></div>;
   if (loading || !company) return <div className="text-center mt-5">Yuklanmoqda...</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-      <div className="glass-panel" style={{ marginBottom: '1rem' }}>
+    <div className="admin-workspace">
+      <div className="workspace-heading">
         <div className="admin-header">
           <div>
-            <h2 style={{ margin: 0 }}>{company.name} Admin Paneli</h2>
+            <span className="eyebrow">BOSHQARUV MARKAZI</span><h2 style={{ margin: 0 }}>{company.name}</h2>
             <p style={{ margin: 0, opacity: 0.7 }}>Kompaniya kodi: <strong>{company.companyCode}</strong></p>
           </div>
-          <button onClick={handleLogout} className="btn btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={handleLogout} className="btn btn-outline logout-button" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <LogOut size={18} /> Chiqish
           </button>
         </div>
       </div>
 
-      <div className="admin-tabs">
+      <div className="overview-grid">
+        <div className="overview-card"><span>Jami xodimlar</span><strong>{users.filter(u => u.role !== 'admin').length}</strong><Users size={21}/></div>
+        <div className="overview-card"><span>Bugun kelganlar</span><strong>{new Set(attendance.filter(a => a.type === 'keldi' && new Date(a.timestamp).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' })).map(a => a.employeeId)).size}</strong><CheckCircle size={21}/></div>
+        <div className="overview-card"><span>Kutilayotgan so‘rovlar</span><strong>{leaveRequests.filter(r => r.status === 'pending').length}</strong><CalendarDays size={21}/></div>
+      </div>
+      <nav className="admin-tabs" aria-label="Admin bo‘limlari">
         <button className={`btn ${activeTab === 'main' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('main')}>
-          <Settings size={20} /> Asosiy sozlamalar
+          <LayoutDashboard size={20} /> Asosiy
         </button>
         <button className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('users')}>
           <Users size={20} /> Xodimlar
         </button>
         <button className={`btn ${activeTab === 'attendance' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('attendance')}>
-          <CalendarDays size={20} /> Davomat Tarixi
+          <CalendarDays size={20} /> Davomat
         </button>
         <button className={`btn ${activeTab === 'requests' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('requests')}>
           <CalendarDays size={20} /> So'rovlar
         </button>
-      </div>
+        <button className={`btn ${activeTab === 'telegram' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('telegram')}><Send size={20}/> Telegram</button>
+      </nav>
+
+      {activeTab === 'telegram' && <TelegramSettings companyId={company._id}/>}
 
       {activeTab === 'main' && (
-        <div className="glass-panel" style={{ textAlign: 'center' }}>
-          <h3>Kompaniya QR Kodi</h3>
+        <div className="glass-panel settings-layout">
+          <div className="qr-section"><span className="eyebrow">DAVOMAT NUQTASI</span><h3>Kompaniya QR Kodi</h3>
           <p>Xodimlar shu kodni skaner qilib keldi-ketdi qiladilar</p>
           <div className="qr-container">
             <QRCodeSVG value={company.qrCodeData} size={250} />
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '2rem' }}>
+          </div><div className="office-settings">
             <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
               <h4>Lokatsiya Nazorati</h4>
               <p style={{ fontSize: '0.9rem' }}>Xodimlar faqat ofis atrofida (100m radius) QR skaner qila olishadi.</p>

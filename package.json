@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test api/tests/*.test.js",
+    "start:api": "node api/server.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

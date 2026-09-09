@@ -9,7 +9,20 @@ const companySchema = new mongoose.Schema({
     lat: { type: Number },
     lng: { type: Number }
   },
-  telegramBotToken: { type: String, default: '' },
+  telegramBotToken: { type: String, default: '', select: false },
+  cronApiKey: { type: String, default: '', select: false },
+  cronCallbackSecret: { type: String, default: '', select: false },
+  cronSiteUrl: { type: String, default: '' },
+  cronJobKeldi: Number,
+  cronJobKetdi: Number,
+  cronSyncStatus: { type: String, default: 'not_connected' },
+  cronSyncError: { type: String, default: '' },
+  cronSyncLockUntil: Date,
+  telegramEnabled: { type: Boolean, default: false },
+  telegramBotUsername: { type: String, default: '' },
+  telegramConfiguredAt: { type: Date },
+  telegramLastSentAt: { type: Date },
+  telegramLastError: { type: String, default: '' },
   telegramChatId: { type: String, default: '' }, // Eski field - backward compat
   telegramSubscribers: [{
     chatId: { type: String, required: true },

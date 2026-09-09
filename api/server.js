@@ -20,6 +20,7 @@ if (!cachedDb) {
 }
 
 async function connectToDatabase() {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI sozlanmagan');
   if (cachedDb.conn) {
     return cachedDb.conn;
   }
@@ -45,6 +46,7 @@ async function connectToDatabase() {
 // Har bir so'rovda baza ulanganini tekshiramiz
 app.use(async (req, res, next) => {
   try {
+    if (!process.env.JWT_SECRET || !process.env.MONGODB_URI) return res.status(503).json({ message: 'Server ulanishi hali sozlanmagan. Administratorga murojaat qiling.' });
     await connectToDatabase();
     next();
   } catch (error) {
@@ -53,6 +55,8 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
+app.use('/api/telegram', require('./routes/telegram'));
+app.use('/api/cron', require('./routes/cron'));
 app.use('/api/auth', authRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/attendance', attendanceRoutes);
