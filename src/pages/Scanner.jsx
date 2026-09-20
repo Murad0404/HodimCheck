@@ -52,7 +52,13 @@ export default function Scanner() {
       const res = await fetch(`/api/company/${user.companyId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+        return;
+      }
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Xatolik");
       setCompanyData(data);
       if (data.faceIdEnabled && !user.faceDescriptor) {
         // If face is enabled but not registered, force scanner mode without loc check for registration

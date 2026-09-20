@@ -32,6 +32,11 @@ export default function AdminDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+        return;
+      }
       if (!res.ok) throw new Error(data.message || 'Kompaniya ma’lumotlari yuklanmadi');
       setCompany(data);
     } catch (err) {
@@ -207,7 +212,7 @@ export default function AdminDashboard() {
   };
 
 
-  if (loadError) return <div className="glass-panel" role="alert"><p>{loadError}</p><button className="btn btn-primary" onClick={() => window.location.reload()}>Qayta yuklash</button></div>;
+  if (loadError) return <div className="glass-panel" role="alert"><p>{loadError}</p><div style={{display:'flex', gap:'10px', justifyContent:'center'}}><button className="btn btn-primary" onClick={() => window.location.reload()}>Qayta yuklash</button><button className="btn btn-outline" onClick={handleLogout}>Chiqish</button></div></div>;
   if (loading || !company) return <div className="text-center mt-5">Yuklanmoqda...</div>;
 
   return (
